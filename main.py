@@ -363,12 +363,11 @@ class SSHThread(QThread):
             finally:
                 self.ssh.close()
 
-
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.current_module_path = None
-        self.setWindowTitle("BSTG Payload Hub")
+        self.setWindowTitle("Bulletproof Solutions Testing Interface")
         self.setGeometry(100, 100, 800, 600)
 
         self.layout = QVBoxLayout()
@@ -380,6 +379,10 @@ class MainWindow(QMainWindow):
         self.layout.addWidget(self.tab_widget)
 
         self.tab_widget.tabCloseRequested.connect(self.close_tab)
+
+        self.terminal_button = QPushButton("Open Terminal", self)
+        self.terminal_button.clicked.connect(self.open_terminal_tab)
+        self.layout.addWidget(self.terminal_button)
 
         self.moduleSelectionLayout = QHBoxLayout()  # Horizontal layout for module selection
 
@@ -443,6 +446,21 @@ class MainWindow(QMainWindow):
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
         self.statusBar = self.statusBar()
         self.update_status_bar()
+
+    def open_terminal_tab(self):
+        # Get the currently selected drone's details
+        drone_id = self.drone_selector.currentText()
+        if not drone_id:
+            QMessageBox.warning(self, "No Drone Selected", "Please select a drone first.")
+            return
+
+        host, username, password = self.drones.get(drone_id, (None, None, None))
+        if not host:
+            QMessageBox.warning(self, "No Host Found", "The selected drone does not have a valid host address.")
+            return
+
+        terminal_url = f"http://{host}:5000"  # Assuming the terminal is served on port 5000
+        QDesktopServices.openUrl(QUrl(terminal_url))
         
     def add_home_cards(self):
         # Example of adding a card with a URL
