@@ -7,12 +7,15 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor
 import paramiko
 import json
-import re
 # TODO 
 """
-allow for arguments in modules
-
+Integration with nmb and n2p via homepage
 make ui more clean and readable
+create readme and dev guide
+
+# Done
+json payloads for multi windows
+allow for arguments in modules 
 """
 
 DRACULA_STYLESHEET = """
@@ -147,17 +150,6 @@ def load_config():
         with open(CONFIG_FILE, 'r') as file:
             return json.load(file)
     return {}
-
-def strip_ansi_codes(text):
-    # This pattern is designed to catch common ANSI escape sequences
-    ansi_escape = re.compile(r'''
-        \x1B  # ESC
-        (?:   # 7-bit C1 Fe (except CSI)
-            [@-_] |
-            \[ [0-?]* [ -/]* [@-~]  # CSI ... Cmd
-        )
-    ''', re.VERBOSE)
-    return ansi_escape.sub('', text)
 
 class PythonSyntaxHighlighter(QSyntaxHighlighter):
     def __init__(self, parent=None):
@@ -323,28 +315,33 @@ class SSHThread(QThread):
 
             if self.is_script_path:
                 remote_script_path = self.transfer_script(self.full_command.split()[0])
-                # Use the absolute path for executing the script
-                command_to_run = f"echo $$; exec {remote_script_path} {' '.join(self.full_command.split()[1:])}"
+                command_to_run = f"{remote_script_path} {' '.join(self.full_command.split()[1:])}"
             else:
-                command_to_run = f"echo $$; exec {self.full_command}"
+                command_to_run = self.full_command
 
             stdin, stdout, stderr = self.ssh.exec_command(command_to_run, get_pty=True)
+            output_buffer = ""
+            error_buffer = ""
 
-            # Correctly parsing the PID
-            try:
-                self.pid = int(stdout.readline().strip())
-            except ValueError:
-                self.update_output.emit("Error: Unable to parse PID.")
-                return
-
-            while self.running and not stdout.channel.exit_status_ready():
+            while self.running:
                 if stdout.channel.recv_ready():
-                    aline = stdout.channel.recv(1024).decode('utf-8')
-                    clean_line = strip_ansi_codes(aline)
-                    self.update_output.emit(clean_line)
+                    output_buffer += stdout.channel.recv(4096).decode('utf-8')
+                    while '\n' in output_buffer:
+                        line, output_buffer = output_buffer.split('\n', 1)
+                        self.update_output.emit(line.strip())
+
                 if stderr.channel.recv_stderr_ready():
-                    aline = stderr.channel.recv_stderr(1024)
-                    self.update_output.emit(aline.decode('utf-8'))
+                    error_buffer += stderr.channel.recv_stderr(4096).decode('utf-8')
+                    while '\n' in error_buffer:
+                        line, error_buffer = error_buffer.split('\n', 1)
+                        self.update_output.emit(line.strip())
+
+                if stdout.channel.exit_status_ready():
+                    if output_buffer:
+                        self.update_output.emit(output_buffer.strip())
+                    if error_buffer:
+                        self.update_output.emit(error_buffer.strip())
+                    break
 
         except Exception as e:
             self.update_output.emit(f"SSH Connection Error: {str(e)}")
