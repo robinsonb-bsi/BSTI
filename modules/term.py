@@ -13,7 +13,7 @@ master_fd_dict = {}
 
 def start_pty_process(client_id):
     master_fd, slave_fd = pty.openpty()
-    subprocess.Popen(['bash'], stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, text=True)
+    subprocess.Popen(['script', '/dev/null', '-c', 'bash'], stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, text=True)
     master_fd_dict[client_id] = master_fd
     thread = threading.Thread(target=read_from_master, args=(master_fd, client_id))
     thread.start()
