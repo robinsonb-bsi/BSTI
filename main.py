@@ -12,6 +12,9 @@ import json
 Integration with nmb and n2p via homepage
 make ui more clean and readable
 create readme and dev guide
+parse arguments and prompt user based on how many
+create module file
+prevent module editor or home from closing 
 
 # Done
 json payloads for multi windows
@@ -136,6 +139,54 @@ DRACULA_STYLESHEET = """
     }
 """
 
+class CommandLineArgsDialog(QDialog):
+    def __init__(self, script_path, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Enter Command-Line Arguments')
+
+        layout = QVBoxLayout(self)
+
+        # Parse the script for arguments
+        self.args_metadata = self.parse_script_for_args(script_path)
+        self.arg_inputs = {}
+        for arg, desc in self.args_metadata.items():
+            layout.addWidget(QLabel(f"{arg} - {desc}"))
+            arg_input = QLineEdit(self)
+            self.arg_inputs[arg] = arg_input
+            layout.addWidget(arg_input)
+
+        self.submit_button = QPushButton('Submit', self)
+        self.submit_button.clicked.connect(self.accept)
+        layout.addWidget(self.submit_button)
+
+    def get_arguments(self):
+        return ' '.join(input.text().strip() for input in self.arg_inputs.values())
+
+    @staticmethod
+    def parse_script_for_args(script_path):
+        args_metadata = {}
+        try:
+            with open(script_path, 'r') as script_file:
+                parse_args = False
+                for line in script_file:
+                    if line.startswith("#!"):
+                        continue  # Skip shebang line
+                    if line.strip() == '# ARGS':
+                        parse_args = True
+                        continue
+                    if line.strip() == '# ENDARGS':
+                        break
+                    if parse_args and line.startswith('#'):
+                        parts = line[1:].split(None, 2)
+                        if len(parts) >= 2:
+                            args_metadata[parts[0]] = parts[1].strip('" ')
+        except Exception as e:
+            QMessageBox.warning(None, "Error", f"Error reading script: {e}")
+        return args_metadata
+    
+    def has_arguments(self):
+        return bool(self.args_metadata)
+
 
 CONFIG_DIR = ".config"
 CONFIG_FILE = os.path.join(CONFIG_DIR, "drones.json")
@@ -231,24 +282,6 @@ class BashSyntaxHighlighter(QSyntaxHighlighter):
                 self.setFormat(index, length, format)
                 index = expression.indexIn(text, index + length)
         self.setCurrentBlockState(0)
-
-class CommandLineArgsDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Enter Command-Line Arguments')
-
-        layout = QVBoxLayout(self)
-
-        self.args_input = QLineEdit(self)
-        layout.addWidget(self.args_input)
-
-        self.submit_button = QPushButton('Submit', self)
-        self.submit_button.clicked.connect(self.accept)
-        layout.addWidget(self.submit_button)
-
-    def get_arguments(self):
-        return self.args_input.text().strip()
-
 
 class DroneConfigDialog(QDialog):
     def __init__(self, parent=None):
@@ -448,7 +481,6 @@ class MainWindow(QMainWindow):
         self.update_status_bar()
 
     def open_terminal_tab(self):
-        # Get the currently selected drone's details
         drone_id = self.drone_selector.currentText()
         if not drone_id:
             QMessageBox.warning(self, "No Drone Selected", "Please select a drone first.")
@@ -459,7 +491,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "No Host Found", "The selected drone does not have a valid host address.")
             return
 
-        terminal_url = f"http://{host}:5000"  # Assuming the terminal is served on port 5000
+        terminal_url = f"http://{host}:5000" 
         QDesktopServices.openUrl(QUrl(terminal_url))
         
     def add_home_cards(self):
@@ -600,7 +632,6 @@ class MainWindow(QMainWindow):
         drone_id = self.drone_selector.currentText()
         host, username, password = self.drones[drone_id]
 
-        # If the module is a JSON file, execute it as before
         if selected_module.endswith('.json'):
             with open(module_path, 'r') as file:
                 module_data = json.load(file)
@@ -611,14 +642,14 @@ class MainWindow(QMainWindow):
                         self.open_tab_group(tab_info["command"], False, group_name, group_color)
             return
 
-        # For .py or .sh scripts, prompt for command-line arguments
-        args_dialog = CommandLineArgsDialog(self)
-        if args_dialog.exec_() == QDialog.Accepted:
-            args = args_dialog.get_arguments()
+        if selected_module.endswith(('.py', '.sh')):
+            args_dialog = CommandLineArgsDialog(module_path, self)
+            args = ""
+            if args_dialog.has_arguments():
+                if args_dialog.exec_() == QDialog.Accepted:
+                    args = args_dialog.get_arguments()
             full_command = f"{module_path} {args}"
             self.add_ssh_tab(host, username, password, full_command, is_script_path=True)
-
-
 
     def open_tab_group(self, command, is_script_path=True, group_name=None, group_color=None):
         drone_id = self.drone_selector.currentText()
