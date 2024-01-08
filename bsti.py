@@ -1080,9 +1080,11 @@ class MainWindow(QMainWindow):
 
 
     def handle_ssh_output(self, output, tab, log_file_path):
-        # Append the buffered output to the log file
-        with open(log_file_path, 'a') as log_file:
-            log_file.write(output + '\n')
+        try:
+            with open(log_file_path, 'a', encoding='utf-8') as log_file:
+                log_file.write(output + '\n')
+        except Exception as e:
+            print("Error writing to log file:", e)
 
         # Update the UI with the buffered output
         tab.append(output)
@@ -1125,15 +1127,14 @@ class MainWindow(QMainWindow):
 
         if selected_module.endswith(('.py', '.sh')):
             args_dialog = CommandLineArgsDialog(module_path, host, username, password, self)
+            args = ""
+            file_paths = {}
             if args_dialog.has_arguments():
                 if args_dialog.exec_() == QDialog.Accepted:
-                    args_str, file_paths = args_dialog.get_arguments()
-                    # Now args_str is the argument string, and file_paths is the dictionary of file paths
-                    
-                    # Construct the full_command with the argument string
-                    full_command = f"{module_path} {args_str}"
-                    self.add_ssh_tab(host, username, password, (full_command, file_paths), is_script_path=True)
-        
+                    args, file_paths = args_dialog.get_arguments()
+            full_command = (f"{module_path} {args}", file_paths)
+            self.add_ssh_tab(host, username, password, full_command, is_script_path=True)
+            
     def open_tab_group(self, command, is_script_path=True, group_name=None, group_color=None):
         drone_id = self.drone_selector.currentText()
         host, username, password = self.drones[drone_id]
