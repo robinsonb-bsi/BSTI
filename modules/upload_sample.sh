@@ -1,9 +1,9 @@
 #!/bin/bash
 # STARTFILES
-# targets.txt "Targets_description"
+# targets.txt "Targets description"
 # ENDFILES
 # ARGS
-# NSE "NSE_Query_String"
+# NSE "NSE Query String"
 # ENDARGS
 # AUTHOR:
 cat /tmp/targets.txt

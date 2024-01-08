@@ -1,8 +1,8 @@
 #!/bin/bash
 # ARGS
-# NSE "NSE_Query_String" 
-# searchsploit "Query_String"
-# MSF "MSF_Search_String"
+# NSE "NSE Query String" 
+# searchsploit "Query String"
+# MSF "MSF Search String"
 # ENDARGS
 
 # Updates: Uncomment if you want to update these.

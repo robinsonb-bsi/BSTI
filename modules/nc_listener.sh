@@ -1,6 +1,6 @@
 #!/bin/bash
 # ARGS
-# PORT "Desired_port_for_netcat"
+# PORT "Desired port for netcat"
 # ENDARGS
 # AUTHOR: Connor Fancy
 # This script starts a Netcat listener inside a tmux session

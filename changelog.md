@@ -13,3 +13,5 @@
 - file upload metadata
 - added ssh key upload -> need to add section in readme
 - tmux session attaching
+- test if drone is up before connecting
+- fixes to '_' being required instead of spaces for module descriptions

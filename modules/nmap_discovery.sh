@@ -1,8 +1,8 @@
 #!/bin/bash
 # AUTHOR: Connor Fancy
 # STARTFILES
-# targets.txt "Targets_file"
-# exclude.txt "Exclude_file"
+# targets.txt "Targets file"
+# exclude.txt "Exclude file"
 # ENDFILES
 
 TMUX_SESSION="nmap_discovery_scan"

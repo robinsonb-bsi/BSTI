@@ -1,6 +1,6 @@
 #!/bin/bash
 # STARTFILES
-# targets.txt "Target_file_description"
+# targets.txt "Target file description"
 # ENDFILES
 
 

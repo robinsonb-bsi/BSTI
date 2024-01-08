@@ -306,16 +306,19 @@ class CommandLineArgsDialog(QDialog):
                         parse_args = False
                         continue
                     if parse_args and line.startswith('#'):
-                        parts = line[1:].split(None, 2)
-                        if len(parts) >= 2:
-                            args_metadata[parts[0]] = parts[1].strip('" ')
+                        parts = line[1:].strip().split(" ", 1)
+                        if len(parts) == 2:
+                            arg, desc = parts
+                            args_metadata[arg] = desc.strip('"')
                     elif parse_files and line.startswith('#'):
-                        parts = line[1:].split(None, 2)
-                        if len(parts) >= 2:
-                            file_metadata[parts[0]] = parts[1].strip('" ')
+                        parts = line[1:].strip().split(" ", 1)
+                        if len(parts) == 2:
+                            file_arg, desc = parts
+                            file_metadata[file_arg] = desc.strip('"')
         except Exception as e:
             QMessageBox.warning(None, "Error", f"Error reading script: {e}")
         return args_metadata, file_metadata
+
     
     def has_arguments(self):
         return bool(self.args_metadata) or bool(self.file_metadata)
@@ -1141,7 +1144,7 @@ class MainWindow(QMainWindow):
                 # Check if the drone ID already exists in the config
                 if drone_id in self.drones:
                     QMessageBox.warning(self, "Configuration Exists", 
-                                        "This drone configuration already exists.")
+                                        "This BSTG configuration already exists.")
                 else:
                     # Add new drone configuration
                     self.drones[drone_id] = (host, username, password)
@@ -1228,6 +1231,19 @@ class MainWindow(QMainWindow):
                 self.load_module_into_editor(module_path)
 
 
+    def test_drone_connection(self, host, username, password):
+        """Tests the SSH connection to the drone."""
+        try:
+            with paramiko.SSHClient() as ssh:
+                ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                ssh.connect(host, username=username, password=password, timeout=5)
+                # Connection successful
+                return True
+        except Exception as e:
+            # Connection failed
+            QMessageBox.warning(self, "Connection Failed", f"Failed to connect to the {host} BSTG - Error: {e}")
+            return False
+
     def execute_module(self):
         if not self.drone_selector.currentText():
             QMessageBox.warning(self, "No Drone Selected", "Please configure and select a drone first.")
@@ -1242,6 +1258,9 @@ class MainWindow(QMainWindow):
         module_path = os.path.join("modules", selected_module)
         drone_id = self.drone_selector.currentText()
         host, username, password = self.drones[drone_id]
+
+        if not self.test_drone_connection(host, username, password):
+            return
 
         if selected_module.endswith('.json'):
             with open(module_path, 'r') as file:
@@ -1284,7 +1303,6 @@ class MainWindow(QMainWindow):
         def consolidate_linebreaks(text):
             # Replace two or more consecutive linebreaks with a single linebreak
             return re.sub(r'\n{2,}', '\n', text)
-        # Escape special characters in the cleaned output
 
         output = self.log_content_area.toPlainText()
         try:
