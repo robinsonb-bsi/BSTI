@@ -1,1 +1,2 @@
-sudo responder -I eth0
+#!/bin/bash
+sudo responder -I eth0 -w -F -P

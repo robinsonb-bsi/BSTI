@@ -10,3 +10,4 @@
 - buffers for thread safety and increased performance
 - screenshot logs
 - remove ANSI codes from screenshot output
+- file upload metadata

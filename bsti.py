@@ -8,6 +8,7 @@ from PyQt5.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor
 from PyQt5.QtWidgets import QLabel
 import paramiko
 from scp import SCPClient
+import tempfile
 import json
 import datetime
 import subprocess
@@ -19,11 +20,11 @@ import re
 Integration with nmb and n2p tabs
 create readme and dev guide
 depends and auto install ? or leave to module creator
-file transfer metadata 
 automatic screenshots based on metadata or leave manual
-
+fix underscore description requirement
 
 # Done
+file transfer metadata 
 screenshots of logs
 improve homepage for links
 make ui more clean and readable
@@ -181,52 +182,145 @@ DRACULA_STYLESHEET = """
 """
 
 class CommandLineArgsDialog(QDialog):
-    def __init__(self, script_path, parent=None):
+    def __init__(self, script_path, host, username, password, parent=None, ):
         super().__init__(parent)
+        self.host = host
+        self.username = username
+        self.password = password
+
         self.setWindowTitle('Enter Command-Line Arguments')
 
         layout = QVBoxLayout(self)
 
-        # Parse the script for arguments
-        self.args_metadata = self.parse_script_for_args(script_path)
+        # Parse the script for arguments and file requirements
+        self.args_metadata, self.file_metadata = self.parse_script_for_args(script_path)
         self.arg_inputs = {}
+
+        # Add argument fields
         for arg, desc in self.args_metadata.items():
             layout.addWidget(QLabel(f"{arg} - {desc}"))
             arg_input = QLineEdit(self)
             self.arg_inputs[arg] = arg_input
             layout.addWidget(arg_input)
 
+        # Add file browsing fields
+        self.file_inputs = {}
+        for file_arg, desc in self.file_metadata.items():
+            layout.addWidget(QLabel(f"{file_arg} - {desc}"))
+            file_input_layout = QHBoxLayout()
+            file_input = QLineEdit(self)
+            self.file_inputs[file_arg] = file_input
+            file_input_layout.addWidget(file_input)
+            browse_button = QPushButton('Browse', self)
+            browse_button.clicked.connect(lambda _, arg=file_arg: self.browse_file(arg))
+            file_input_layout.addWidget(browse_button)
+            layout.addLayout(file_input_layout)
+
         self.submit_button = QPushButton('Submit', self)
-        self.submit_button.clicked.connect(self.accept)
+        # self.submit_button.clicked.connect(self.accept)
+        self.submit_button.clicked.connect(self.on_submit)
         layout.addWidget(self.submit_button)
 
+    def browse_file(self, arg):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select File")
+        if file_path:
+            self.file_inputs[arg].setText(file_path)
+
     def get_arguments(self):
-        return ' '.join(input.text().strip() for input in self.arg_inputs.values())
+        args_str = ' '.join(input.text().strip() for input in self.arg_inputs.values())
+        file_paths = {arg: input.text().strip() for arg, input in self.file_inputs.items()}
+
+        return args_str, file_paths
+
+    
+    def on_submit(self):
+        # Retrieve the arguments and file paths as a tuple
+        args_str, file_paths = self.get_arguments()
+        success = True
+
+        # Handle file uploads
+        for file_arg, local_path in file_paths.items():
+            if local_path:
+                remote_path = f"/tmp/{file_arg}"
+                if not self.upload_file_to_remote(local_path, remote_path):
+                    success = False
+                    break
+
+        if success:
+            self.accept()
+
+
+    def convert_line_endings(self, local_path):
+        """Convert Windows line endings to Unix/Linux line endings."""
+        with open(local_path, 'r') as file:
+            content = file.read()
+        return content.replace('\r\n', '\n')
+
+    
+    def upload_file_to_remote(self, local_path, remote_path):
+        try:
+            # Convert line endings
+            converted_content = self.convert_line_endings(local_path)
+
+            # Create a temporary file
+            with tempfile.NamedTemporaryFile(delete=False, mode='w') as tmp_file:
+                tmp_file.write(converted_content)
+                tmp_file_path = tmp_file.name
+
+            # Upload the temporary file
+            with paramiko.SSHClient() as ssh:
+                ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                ssh.connect(self.host, username=self.username, password=self.password)
+
+                with ssh.open_sftp() as sftp:
+                    sftp.put(tmp_file_path, remote_path)
+
+            # Clean up the temporary file
+            os.remove(tmp_file_path)
+
+            return True
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Error uploading file: {e}")
+            return False
+
 
     @staticmethod
     def parse_script_for_args(script_path):
         args_metadata = {}
+        file_metadata = {}
         try:
             with open(script_path, 'r') as script_file:
-                parse_args = False
+                parse_args, parse_files = False, False
                 for line in script_file:
                     if line.startswith("#!"):
                         continue  # Skip shebang line
                     if line.strip() == '# ARGS':
                         parse_args = True
                         continue
+                    if line.strip() == '# STARTFILES':
+                        parse_files = True
+                        continue
+                    if line.strip() == '# ENDFILES':
+                        parse_files = False
+                        continue
                     if line.strip() == '# ENDARGS':
-                        break
+                        parse_args = False
+                        continue
                     if parse_args and line.startswith('#'):
                         parts = line[1:].split(None, 2)
                         if len(parts) >= 2:
                             args_metadata[parts[0]] = parts[1].strip('" ')
+                    elif parse_files and line.startswith('#'):
+                        parts = line[1:].split(None, 2)
+                        if len(parts) >= 2:
+                            file_metadata[parts[0]] = parts[1].strip('" ')
         except Exception as e:
             QMessageBox.warning(None, "Error", f"Error reading script: {e}")
-        return args_metadata
+        return args_metadata, file_metadata
     
     def has_arguments(self):
-        return bool(self.args_metadata)
+        return bool(self.args_metadata) or bool(self.file_metadata)
+
 
 
 CONFIG_DIR = ".config"
@@ -369,8 +463,6 @@ class SSHThread(QThread):
         self.is_script_path = is_script_path
         self.ssh = None
         self.running = False
-
-    
             
     def convert_line_endings(self, local_path):
         """Convert Windows line endings to Unix/Linux line endings."""
@@ -399,13 +491,17 @@ class SSHThread(QThread):
             self.ssh.connect(self.host, username=self.username, password=self.password)
 
             if self.is_script_path:
-                remote_script_path = self.transfer_script(self.full_command.split()[0])
-                command_to_run = f"{remote_script_path} {' '.join(self.full_command.split()[1:])}"
+                script_path = self.full_command[0].split()[0] 
+                command_args = ' '.join(self.full_command[0].split()[1:])
+                remote_script_path = self.transfer_script(script_path)
+                
+                # Construct the full command python & bash
+                command_to_run = f"{remote_script_path} {command_args}"
             else:
+                # Json payloads
                 command_to_run = self.full_command
-
             stdin, stdout, stderr = self.ssh.exec_command(command_to_run, get_pty=True)
-
+            
             while self.running:
                 if stdout.channel.recv_ready():
                     output = stdout.channel.recv(4096).decode('utf-8')
@@ -428,12 +524,10 @@ class SSHThread(QThread):
         self.running = False
         if self.ssh:
             try:
-                # Safely attempt to send a kill command
                 if self.pid:
                     kill_command = f"kill {self.pid}"
                     self.ssh.exec_command(kill_command)
             except Exception as e:
-                # Log or print the exception if needed
                 pass
             finally:
                 self.ssh.close()
@@ -1030,14 +1124,16 @@ class MainWindow(QMainWindow):
             return
 
         if selected_module.endswith(('.py', '.sh')):
-            args_dialog = CommandLineArgsDialog(module_path, self)
-            args = ""
+            args_dialog = CommandLineArgsDialog(module_path, host, username, password, self)
             if args_dialog.has_arguments():
                 if args_dialog.exec_() == QDialog.Accepted:
-                    args = args_dialog.get_arguments()
-            full_command = f"{module_path} {args}"
-            self.add_ssh_tab(host, username, password, full_command, is_script_path=True)
-
+                    args_str, file_paths = args_dialog.get_arguments()
+                    # Now args_str is the argument string, and file_paths is the dictionary of file paths
+                    
+                    # Construct the full_command with the argument string
+                    full_command = f"{module_path} {args_str}"
+                    self.add_ssh_tab(host, username, password, (full_command, file_paths), is_script_path=True)
+        
     def open_tab_group(self, command, is_script_path=True, group_name=None, group_color=None):
         drone_id = self.drone_selector.currentText()
         host, username, password = self.drones[drone_id]
@@ -1069,19 +1165,31 @@ class MainWindow(QMainWindow):
 
             css = """
             body {
-                background-color: #000000; /* Black background color */
-                padding: 10px;
-                font-family: 'Courier New', monospace;
-                color: #ffffff;  /* Set the text color to white */
+                background-color: #1e1e1e; /* Dark background color */
+                padding: 20px;
+                font-family: 'Consolas', 'Courier New', monospace;
+                color: #dcdcdc;  /* Light grey text color */
+                line-height: 1.4; /* Adjust line height for better readability */
+                border: 1px solid #333; /* Add a border for a distinct terminal look */
+                border-radius: 4px; /* Slightly round the corners */
+                box-shadow: 0 0 10px rgba(0, 0, 0, 0.5); /* Subtle shadow for depth */
             }
+
             pre {
-                white-space: pre-wrap;       /* Since CSS 2.1 */
-                white-space: -moz-pre-wrap;  /* Mozilla, since 1999 */
-                white-space: -pre-wrap;      /* Opera 4-6 */
-                white-space: -o-pre-wrap;    /* Opera 7 */
-                word-wrap: break-word;       /* Internet Explorer 5.5+ */
+                white-space: pre-wrap;       /* Wrap text */
+                word-wrap: break-word;       /* Break the word at the edge */
+            }
+
+            /* Optional: Add a background texture for a more nuanced look */
+            body::after {
+                content: '';
+                position: absolute;
+                top: 0; right: 0; bottom: 0; left: 0;
+                z-index: -1;
+                opacity: 0.1; /* Adjust opacity for subtlety */
             }
             """
+
 
             # Create a temporary HTML file containing only the cleaned output
             html_content = f"""
