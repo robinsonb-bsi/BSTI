@@ -1,0 +1,12 @@
+# v0.1
+- log viewer & session logging
+- file transfer tab
+- reworked menu bar
+- reworked terminal to open in local terminal rather than browser
+- BSTG and module search filter
+- create new modules
+- added useful links to homepage - bstg's specific nessus and plextrac for now
+- fixed close tab UI bug 
+- buffers for thread safety and increased performance
+- screenshot logs
+- remove ANSI codes from screenshot output
