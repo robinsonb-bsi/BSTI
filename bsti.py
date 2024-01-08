@@ -20,7 +20,6 @@ import re
 Integration with nmb and n2p tabs
 create readme and dev guide
 depends and auto install ? or leave to module creator
-automatic screenshots based on metadata or leave manual
 fix underscore description requirement
 
 # Done
@@ -561,6 +560,35 @@ class SearchableComboBox(QComboBox):
         self.items = items
         self.updateFilter()
 
+class TmuxSessionDialog(QDialog):
+    def __init__(self, sessions, parent=None):
+        super(TmuxSessionDialog, self).__init__(parent)
+        self.setWindowTitle("Select Tmux Session")
+        self.selected_session = None
+        self.sessions = sessions
+
+        layout = QVBoxLayout(self)
+
+        # Label
+        layout.addWidget(QLabel("Select a tmux session:"))
+
+        # Combo box for tmux sessions
+        self.session_combo = QComboBox(self)
+        self.session_combo.addItems(sessions)
+        layout.addWidget(self.session_combo)
+
+        # Submit button
+        self.submit_button = QPushButton("Connect", self)
+        self.submit_button.clicked.connect(self.on_submit)
+        layout.addWidget(self.submit_button)
+
+    def on_submit(self):
+        self.selected_session = self.session_combo.currentText()
+        self.accept()
+
+    def get_selected_session(self):
+        self.exec_()
+        return self.selected_session
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -599,6 +627,17 @@ class MainWindow(QMainWindow):
         self.configure_drone_action = QAction("Configure New BSTG", self)
         self.configure_drone_action.triggered.connect(self.configure_drone)  
         self.drone_menu.addAction(self.configure_drone_action)
+
+        # Add an action for SSH key configuration
+        self.configure_ssh_key_action = QAction("Add SSH Key", self)
+        self.configure_ssh_key_action.triggered.connect(self.add_ssh_key)
+        self.drone_menu.addAction(self.configure_ssh_key_action)
+
+        # Tmux session attach
+        self.connect_tmux_action = QAction("Connect to Tmux Session", self)
+        self.connect_tmux_action.triggered.connect(self.on_connect_tmux_triggered)
+        self.terminal_menu.addAction(self.connect_tmux_action)
+
 
         # Drone selection layout
         self.droneSelectionLayout = QHBoxLayout()
@@ -764,6 +803,95 @@ class MainWindow(QMainWindow):
                 self.populate_log_sessions_list()  # Refresh the log sessions list
             except Exception as e:
                 QMessageBox.warning(self, "Error", f"Failed to delete logs: {e}")
+
+    def add_ssh_key(self):
+        # Let the user select a drone
+        drone_id = self.drone_selector.currentText()
+        if not drone_id:
+            QMessageBox.warning(self, "No Drone Selected", "Please select a drone first.")
+            return
+
+        # Let the user select an SSH key file
+        ssh_key_path, _ = QFileDialog.getOpenFileName(self, "Select SSH Key", "", "SSH Key Files (*.pub)")
+        if not ssh_key_path:
+            return  # User canceled or did not select a file
+
+        host, username, password = self.drones[drone_id]
+
+        # Function to upload the SSH key
+        def upload_ssh_key(ssh_key_path, host, username, password):
+            try:
+                with paramiko.SSHClient() as ssh:
+                    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                    ssh.connect(host, username=username, password=password)
+
+                    # Read the SSH public key
+                    with open(ssh_key_path, 'r') as key_file:
+                        ssh_key = key_file.read().strip()
+
+                    # Upload the SSH key
+                    ssh.exec_command(f"echo '{ssh_key}' >> ~/.ssh/authorized_keys")
+
+                QMessageBox.information(self, "Success", "SSH Key added successfully.")
+            except Exception as e:
+                QMessageBox.warning(self, "Error", f"Failed to add SSH Key: {str(e)}")
+
+        # Run the upload process
+        upload_ssh_key(ssh_key_path, host, username, password)
+
+    def connect_to_tmux_session(self, session_name):
+        drone_id = self.drone_selector.currentText()
+        if not drone_id:
+            QMessageBox.warning(self, "No Drone Selected", "Please select a drone first.")
+            return
+
+        host, username, _ = self.drones[drone_id]
+        if sys.platform == "win32":
+            # Windows (using PowerShell)
+            command = f"start powershell ssh {username}@{host} -t 'tmux attach -t \"{session_name}\"'"
+        elif sys.platform.startswith("linux") or sys.platform == "darwin":
+            # Linux or macOS
+            command = f"gnome-terminal -- ssh {username}@{host} -t 'tmux attach -t \"{session_name}\"'"
+
+        try:
+            subprocess.run(command, shell=True)
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to open terminal: {e}")
+
+    def on_connect_tmux_triggered(self):
+        drone_id = self.drone_selector.currentText()
+        if not drone_id:
+            QMessageBox.warning(self, "No Drone Selected", "Please select a drone first.")
+            return
+        host, username, password = self.drones[drone_id]
+        sessions = self.fetch_tmux_sessions(host, username, password)
+
+        if not sessions:
+            return
+
+        # Show dialog to select a tmux session
+        dialog = TmuxSessionDialog(sessions, self)
+        selected_session = dialog.get_selected_session()
+        
+        if selected_session:
+            self.connect_to_tmux_session(selected_session)
+
+    def fetch_tmux_sessions(self, host, username, password):
+        try:
+            with paramiko.SSHClient() as ssh:
+                ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                ssh.connect(host, username=username, password=password)
+                stdin, stdout, stderr = ssh.exec_command("tmux list-sessions -F '#S'")
+                sessions = stdout.read().decode('utf-8').strip()
+                if not sessions:
+                    QMessageBox.information(self, "No Tmux Sessions", "No active tmux sessions found on this BSTG.")
+                    return None
+                return sessions.split('\n')
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to fetch tmux sessions: {str(e)}")
+            return None
+
+
 
     def open_terminal_ssh(self):
         drone_id = self.drone_selector.currentText()

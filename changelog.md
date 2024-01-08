@@ -11,3 +11,5 @@
 - screenshot logs
 - remove ANSI codes from screenshot output
 - file upload metadata
+- added ssh key upload -> need to add section in readme
+- tmux session attaching
