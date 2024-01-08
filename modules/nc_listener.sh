@@ -18,6 +18,6 @@ else
     # Create a new tmux session and run Netcat
     tmux new-session -d -s $TMUX_SESSION "nc -lvnp $NC_PORT"
     echo "Netcat listener started in tmux session $TMUX_SESSION on port $NC_PORT"
-    echo "Use 'tmux attach -t $TMUX_SESSION' to interact with the session."
+    echo "Use 'tmux attach -t $TMUX_SESSION' or the UI to interact with the session."
 fi
 
