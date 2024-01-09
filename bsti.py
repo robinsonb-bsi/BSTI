@@ -1,11 +1,12 @@
+# BSTI
+# version: 0.1
+# Authors: Connor Fancy
+
 import sys
 import os
-from PyQt5.QtWidgets import (QApplication, QAction, QTabBar, QStyle, QPlainTextEdit, QMainWindow, QGridLayout, QHBoxLayout, QTabWidget, QTextEdit, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QDialog, QLineEdit, QFormLayout, QMessageBox, QComboBox)
-from PyQt5.QtCore import QThread, pyqtSignal, QUrl, QRegExp
-from PyQt5.QtGui import QDesktopServices
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor
-from PyQt5.QtWidgets import QLabel
+from PyQt5.QtWidgets import (QApplication, QCheckBox, QLabel, QAction, QTabBar, QStyle, QPlainTextEdit, QMainWindow, QGridLayout, QHBoxLayout, QTabWidget, QTextEdit, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QDialog, QLineEdit, QFormLayout, QMessageBox, QComboBox)
+from PyQt5.QtCore import QThread, pyqtSignal, QUrl, QRegExp, Qt
+from PyQt5.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QDesktopServices
 import paramiko
 from scp import SCPClient
 import tempfile
@@ -15,14 +16,18 @@ import subprocess
 from htmlwebshot import WebShot, Config
 import html
 import re
+
 # TODO 
 """
-Integration with nmb and n2p tabs
-create readme and dev guide
+Integration with n2p tabs/menu bar
 depends and auto install ? or leave to module creator
-fix underscore description requirement
+organize code :(
+rework NMB to not prompt user for interactive input (csv and txt files)
 
 # Done
+Integration with nmb 
+fix underscore description requirement
+create readme and dev guide
 file transfer metadata 
 screenshots of logs
 improve homepage for links
@@ -323,8 +328,6 @@ class CommandLineArgsDialog(QDialog):
     def has_arguments(self):
         return bool(self.args_metadata) or bool(self.file_metadata)
 
-
-
 CONFIG_DIR = ".config"
 CONFIG_FILE = os.path.join(CONFIG_DIR, "drones.json")
 
@@ -592,6 +595,24 @@ class TmuxSessionDialog(QDialog):
     def get_selected_session(self):
         self.exec_()
         return self.selected_session
+
+class NMBRunnerThread(QThread):
+    output_signal = pyqtSignal(str)
+
+    def __init__(self, command):
+        super().__init__()
+        self.command = command
+
+    def run(self):
+        process = subprocess.Popen(self.command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        while True:
+            output = process.stdout.readline()
+            if output == '' and process.poll() is not None:
+                break
+            if output:
+                self.output_signal.emit(output.strip())
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -769,10 +790,213 @@ class MainWindow(QMainWindow):
         self.add_home_cards()
         self.tab_widget.insertTab(0, self.home_tab, "Home")
 
+        # Add NMB tab
+        self.setup_nmb_tab()
+
         # Active connections
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
         self.statusBar = self.statusBar()
         self.update_status_bar()
+
+    def setup_nmb_tab(self):
+        self.argument_fields = {}
+        self.nmb_tab = QWidget()
+        self.nmb_layout = QVBoxLayout(self.nmb_tab)
+
+        # Mode selection setup
+        self.mode_label = QLabel("Mode:")
+        self.mode_combobox = QComboBox()
+        self.mode_combobox.addItems(["deploy", "external", "internal", "monitor", "export", "web", "mobsf", "immuniweb", "create", "launch", "pause", "resume", "regen"])
+        self.nmb_layout.addWidget(self.mode_label)
+        self.nmb_layout.addWidget(self.mode_combobox)
+
+        # Initialize mode arguments mapping
+        self.initialize_mode_arguments()
+
+        # Connect mode combobox change signal
+        self.mode_combobox.currentIndexChanged.connect(self.update_argument_fields)
+
+        self.argument_layout = QFormLayout() 
+        self.nmb_layout.addLayout(self.argument_layout) 
+        # Execute button
+        self.execute_nmb_button = QPushButton("Execute NMB")
+        self.execute_nmb_button.clicked.connect(self.execute_nmb)
+        self.nmb_layout.addWidget(self.execute_nmb_button)
+
+        # Output area
+        self.nmb_output = QTextEdit()
+        self.nmb_output.setReadOnly(True)
+        self.nmb_layout.addWidget(self.nmb_output)
+
+        # Add NMB tab to the main tab widget
+        self.tab_widget.addTab(self.nmb_tab, "NMB")
+        self.update_argument_fields()
+
+    def initialize_mode_arguments(self):
+        # need to review this further 
+        self.mode_arguments = {
+            "deploy": {
+                "drone": "Text",
+                "client-name": "Text",
+                "scope": ["core", "nc", "custom"],
+                "exclude-file": "File",
+                "discovery": "Checkbox",
+                "guess": "Checkbox",
+                "eyewitness": "Checkbox"
+            },
+            "create": {
+                "drone": "Text",
+                "client-name": "Text",
+                "scope": ["core", "nc", "custom"],
+                "exclude-file": "File",
+                "discovery": "Checkbox"
+            },
+            "launch": {
+                "drone": "Text",
+                "client-name": "Text"
+            },
+            "pause": {
+                "drone": "Text",
+                "client-name": "Text"
+            },
+            "resume": {
+                "drone": "Text",
+                "client-name": "Text"
+            },
+            "monitor": {
+                "drone": "Text",
+                "client-name": "Text"
+            },
+            "export": {
+                "drone": "Text",
+                "client-name": "Text"
+            },
+            "internal": {
+                "drone": "Text",
+                "local": "Checkbox",
+                "guess": "Checkbox",
+                "eyewitness": "Checkbox"
+            },
+            "external": {
+                "drone": "Text",
+                "local": "Checkbox",
+                "guess": "Checkbox",
+                "eyewitness": "Checkbox"
+            },
+            "web": {
+                "burp-user-file": "File",
+                "burp-pass-file": "File",
+                "targets": "File",
+                "burp-url": "Text",
+                "reattach": "Checkbox"
+            },
+            "mobsf": {
+                "mobsf-url": "Text",
+                "scan-type": ["apk", "ipa"],
+                "app-name": "Text"
+            },
+            "immuniweb": {
+                "immuni-scan-type": ["apk", "ipa"],
+                "immuni-app-name": "Text",
+                "force": "Checkbox"
+            },
+            "regen": {
+                # No arguments required for "regen" mode
+            }
+        }
+
+
+
+    def update_argument_fields(self):
+        selected_mode = self.mode_combobox.currentText()
+        required_args = self.mode_arguments.get(selected_mode, [])
+
+        # Clear existing fields
+        self.clear_argument_fields()
+
+        # Check if required_args is a dictionary or a list
+        if isinstance(required_args, dict):
+            # Handle dictionary of arguments with types
+            for arg, arg_type in required_args.items():
+                self.add_argument_field(arg, arg_type)
+        elif isinstance(required_args, list):
+            # Handle list of arguments (all considered as text input)
+            for arg in required_args:
+                self.add_argument_field(arg, "Text")
+
+    def clear_argument_fields(self):
+        while self.argument_layout.count():
+            item = self.argument_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        self.argument_fields.clear()
+    
+    def nmb_browse_file(self, arg):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select File")
+        if file_path:
+            self.argument_fields[arg].setText(file_path)
+
+    def add_argument_field(self, arg, arg_type):
+        label = QLabel(f"{arg.replace('_', ' ').capitalize()}:")
+        if arg_type == "Text":
+            input_field = QLineEdit()
+            self.argument_layout.addRow(label, input_field)
+        elif arg_type == "File":
+            file_layout = QHBoxLayout()
+
+            input_field = QLineEdit()
+            browse_button = QPushButton("Browse")
+            browse_button.clicked.connect(lambda _, a=arg: self.nmb_browse_file(a))
+
+            file_layout.addWidget(input_field)
+            file_layout.addWidget(browse_button)
+
+            combined_widget = QWidget() 
+            combined_widget.setLayout(file_layout)
+
+            self.argument_layout.addRow(label, combined_widget) 
+        elif arg_type == "Checkbox":
+            input_field = QCheckBox()
+            self.argument_layout.addRow(label, input_field)
+        elif isinstance(arg_type, list):  # for dropdowns
+            input_field = QComboBox()
+            input_field.addItems(arg_type)
+            self.argument_layout.addRow(label, input_field)
+        else:
+            return  # Unsupported type
+        self.argument_fields[arg] = input_field
+
+
+    def execute_nmb(self):
+        host, username, password = self.get_current_drone_connection()
+
+        # Construct command as a list of arguments
+        mode = self.mode_combobox.currentText()
+        command_args = ["python", "nmb.py", "-m", mode, "-u", username, "-p", password]
+
+        for arg, widget in self.argument_fields.items():
+            if isinstance(widget, QLineEdit):
+                value = widget.text().strip()
+                if value:
+                    command_args.extend(["--" + arg, value])
+            elif isinstance(widget, QCheckBox) and widget.isChecked():
+                command_args.append("--" + arg)
+            elif isinstance(widget, QComboBox):
+                value = widget.currentText()
+                if value:
+                    command_args.extend(["--" + arg, value])
+
+        # Clear existing output
+        self.nmb_output.clear()
+
+        # Create and start the thread
+        self.nmb_thread = NMBRunnerThread(command_args)
+        self.nmb_thread.output_signal.connect(self.update_output)
+        self.nmb_thread.start()
+
+    def update_output(self, text):
+        self.nmb_output.append(text)
 
     def populate_log_sessions_list(self):
         self.log_sessions_combo.clear()

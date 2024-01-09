@@ -1,0 +1,16 @@
+pathlib
+requests
+colorlog
+py7zr
+python-dotenv
+pandas
+tabulate
+openpyxl
+htmlwebshot
+ping3
+filelock
+scikit-learn
+fuzzywuzzy
+python-Levenshtein
+pretty-errors
+halo
