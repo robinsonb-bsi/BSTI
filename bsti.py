@@ -24,11 +24,11 @@ import re
 organize code :(
 Integration with n2p tabs/menu bar
 home page diagnostics
-render html, csv results from NMB/interpreter 
 open NMB json for editing
 
 
 # Done
+render html, csv results from NMB/interpreter 
 temp file creating when module is edited, that is executed for temp changes
 Integration with nmb 
 rework NMB to not prompt user for interactive input (csv and txt files)
