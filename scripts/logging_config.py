@@ -31,6 +31,12 @@ formatter = colorlog.ColoredFormatter(
     style='%'
 )
 
+# Console Handler
 console_handler = logging.StreamHandler()
 console_handler.setFormatter(formatter)
 log.addHandler(console_handler)
+
+# File Handler
+file_handler = logging.FileHandler('NMB_output.log') 
+file_handler.setFormatter(formatter)
+log.addHandler(file_handler)

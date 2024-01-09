@@ -7,7 +7,7 @@ import os
 import pandas as pd
 from PyQt5.QtWidgets import (QApplication, QTableWidget, QTableWidgetItem, QCheckBox, QLabel, QAction, QTabBar, QStyle, QPlainTextEdit, QMainWindow, QGridLayout, QHBoxLayout, QTabWidget, QTextEdit, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QDialog, QLineEdit, QFormLayout, QMessageBox, QComboBox)
 from PyQt5.QtCore import QThread, pyqtSignal, QUrl, QRegExp, Qt
-from PyQt5.QtGui import QTextCursor, QSyntaxHighlighter, QTextCharFormat, QColor, QDesktopServices
+from PyQt5.QtGui import QTextCursor, QFont, QSyntaxHighlighter, QTextCharFormat, QColor, QDesktopServices
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 import paramiko
 from scp import SCPClient
@@ -24,10 +24,12 @@ import re
 organize code :(
 Integration with n2p tabs/menu bar
 home page diagnostics
-open NMB json for editing
-
+parser for csv built-in
+metadata for modules to map to nessus findings, then convert to md5 when saving the screenshot
+setup project folder per session
 
 # Done
+open NMB json for editing
 render html, csv results from NMB/interpreter 
 temp file creating when module is edited, that is executed for temp changes
 Integration with nmb 
@@ -842,12 +844,21 @@ class MainWindow(QMainWindow):
                 table = self.create_table_from_dataframe(df)
                 layout.addWidget(table)
             elif file_name.lower().endswith('.json'):
-                # Display JSON in a QTextEdit with formatting
+                # Display JSON in a QTextEdit with pretty formatting
                 with open(file_name, 'r') as file:
                     content = file.read()
-                    text_edit = QTextEdit()
-                    text_edit.setPlainText(content)
-                    layout.addWidget(text_edit)
+                    try:
+                        # Parse and pretty-print JSON
+                        parsed_json = json.loads(content)
+                        pretty_json = json.dumps(parsed_json, indent=4, sort_keys=True)
+                    except json.JSONDecodeError:
+                        # In case of JSON decode error, use original content
+                        pretty_json = content
+
+                text_edit = QTextEdit()
+                text_edit.setPlainText(pretty_json)
+                text_edit.setFont(QFont("Courier", 10))  # Optional: Set a fixed-width font for better readability
+                layout.addWidget(text_edit)
             elif file_name.lower().endswith('.html'):
                 # Display HTML in a QWebEngineView
                 web_view = QWebEngineView()

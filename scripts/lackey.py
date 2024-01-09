@@ -425,7 +425,7 @@ class Lackey:
 
         # If the result is unknown and the scan has not been retried yet
         retry_key = (host, plugin_id)
-        if result == "unknown" and retry_key not in retried_scans:
+        if result == "unknown" and "nmap -T4 --host-timeout 300s" in scan_type and retry_key not in retried_scans:
             log.warning('Host appears down - Rerunning scan with -Pn')
             updated_output = self.run_scan(host, port, plugin_id, scan_type, f"{parameters} -Pn", self.drone, self.local_checks)
 
