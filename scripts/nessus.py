@@ -526,25 +526,33 @@ class Nessus:
 
         Returns:
             None
-
         """
-        spinner = Halo(text='Monitoring scan...', spinner='dots')
-        spinner.start()
+        log.info("Monitoring scan...")
 
         status = self.get_scan_info()["status"]
         time_elapsed = 0
+        update_interval = 60  # seconds for regular updates
+        next_update_time = update_interval
 
         while status in ["running", "pending", "resuming"]:
-            status = self.get_scan_info()["status"]
             time.sleep(15)
-            time_elapsed += 1
-            if time_elapsed == 10:
-                spinner.text = "Re-authenticating"
-                self.get_auth(verbose=True)
-                time_elapsed = 0
-            spinner.text = f"Scan status: {status}"
+            time_elapsed += 15
+            status = self.get_scan_info()["status"]
 
-        spinner.succeed("Scan finished")
+            if time_elapsed >= next_update_time:
+                log.info(f"Scan status after {time_elapsed // 60} minutes: {status}")
+                next_update_time += update_interval
+
+            if time_elapsed == 300:  # Re-authenticate every 5 minutes
+                log.info("Re-authenticating")
+                self.get_auth(verbose=True)
+                time_elapsed = 0  # Reset time_elapsed after re-authentication
+                next_update_time = update_interval  # Reset next_update_time after re-authentication
+
+        log.info("Scan finished")
+        time.sleep(5)  # small delay before export
+
+
 
 
     def export_scan(self):

@@ -49,6 +49,7 @@ class Lackey:
             log.info("Eyewitness enabled ...")
             self.analyze_data()
         self.move_evidence()
+        log.info("----------Execution Ended-----------")
 
 
     def move_evidence(self):

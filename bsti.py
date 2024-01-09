@@ -6,7 +6,7 @@ import sys
 import os
 from PyQt5.QtWidgets import (QApplication, QCheckBox, QLabel, QAction, QTabBar, QStyle, QPlainTextEdit, QMainWindow, QGridLayout, QHBoxLayout, QTabWidget, QTextEdit, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QDialog, QLineEdit, QFormLayout, QMessageBox, QComboBox)
 from PyQt5.QtCore import QThread, pyqtSignal, QUrl, QRegExp, Qt
-from PyQt5.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QDesktopServices
+from PyQt5.QtGui import QTextCursor, QSyntaxHighlighter, QTextCharFormat, QColor, QDesktopServices
 import paramiko
 from scp import SCPClient
 import tempfile
@@ -22,10 +22,12 @@ import re
 Integration with n2p tabs/menu bar
 depends and auto install ? or leave to module creator
 organize code :(
-rework NMB to not prompt user for interactive input (csv and txt files)
+
 
 # Done
+temp file creating when module is edited, that is executed for temp changes
 Integration with nmb 
+rework NMB to not prompt user for interactive input (csv and txt files)
 fix underscore description requirement
 create readme and dev guide
 file transfer metadata 
@@ -71,6 +73,21 @@ DRACULA_STYLESHEET = """
         border: none;
         border-radius: 5px;
         padding: 5px 10px;
+    }
+    QPushButton#ExecuteNMBButton {  /* Style for Execute NMB button */
+        background-color: #50fa7b;  /* Green color, but not too bright */
+        color: #282a36;  /* Dark text for contrast */
+        border: 1px solid #6272a4;  /* Border color from the theme */
+    }
+
+    QPushButton#ExecuteNMBButton:hover {  /* Hover effect */
+        background-color: #5af78e;  /* Slightly lighter green */
+        border-color: #50fa7b;  /* Border color changes on hover */
+    }
+
+    QPushButton#ExecuteNMBButton:pressed {  /* Pressed effect */
+        background-color: #3f8c57;  /* Darker shade of green */
+        border-color: #6272a4;  /* Keeping border consistent with theme */
     }
     QPushButton#CardButton {
         font-size: 12pt;  /* Larger font size */
@@ -144,7 +161,7 @@ DRACULA_STYLESHEET = """
         border: none;
     }
     QComboBox::down-arrow {
-        image: url(dropdown-arrow.png); /* Replace with your arrow image */
+        image: url(dropdown-arrow.png);
     }
     QDialog {
         background-color: #282a36;
@@ -617,6 +634,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.current_module_path = None
+        self.temp_file = None
         self.setWindowTitle("Bulletproof Solutions Testing Interface")
         self.setGeometry(100, 100, 800, 600)
         self.threads = []
@@ -681,6 +699,7 @@ class MainWindow(QMainWindow):
         self.module_editor_tab = QWidget()
         self.module_editor_layout = QVBoxLayout(self.module_editor_tab)
         self.module_editor = QPlainTextEdit()
+        self.module_editor.textChanged.connect(self.handle_module_edit)
         self.module_editor_layout.addWidget(self.module_editor)
         self.save_button = QPushButton("Save Module")
         self.save_button.clicked.connect(self.save_module)
@@ -793,10 +812,59 @@ class MainWindow(QMainWindow):
         # Add NMB tab
         self.setup_nmb_tab()
 
-        # Active connections
+        # hide/show tabs based on active tab
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
-        self.statusBar = self.statusBar()
-        self.update_status_bar()
+
+    def save_module(self):
+        if not self.current_module_path or not self.temp_file:
+            QMessageBox.warning(self, "Error", "No module loaded.")
+            return
+
+        try:
+            with open(self.current_module_path, 'w') as file, open(self.temp_file.name, 'r') as temp_file:
+                file.write(temp_file.read())
+
+            QMessageBox.information(self, "Success", "Module saved successfully.")
+
+            # Close and delete the temporary file
+            self.temp_file.close()
+            os.remove(self.temp_file.name)
+            self.temp_file = None  # Reset the temp_file attribute
+
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to save module: {e}")
+
+   
+    def load_module_into_editor(self, module_path):
+        self.current_module_path = module_path
+        try:
+            with open(module_path, 'r') as file:
+                content = file.read()
+
+            # Create a temporary file
+            self.temp_file = tempfile.NamedTemporaryFile(delete=False, mode='w+')
+            self.temp_file.write(content)
+            self.temp_file.flush()
+
+            self.module_editor.setPlainText(content)
+            self.set_syntax_highlighter(module_path)
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to load module: {e}")
+
+
+    def handle_module_edit(self):
+        self.save_to_temp_file()
+
+    def save_to_temp_file(self):
+        if hasattr(self, 'temp_file') and self.temp_file:
+            try:
+                self.temp_file.seek(0)
+                self.temp_file.truncate()
+                self.temp_file.write(self.module_editor.toPlainText())
+                self.temp_file.flush()
+            except Exception as e:
+                print(f"Error saving to temp file: {e}")
+
 
     def setup_nmb_tab(self):
         self.argument_fields = {}
@@ -820,6 +888,7 @@ class MainWindow(QMainWindow):
         self.nmb_layout.addLayout(self.argument_layout) 
         # Execute button
         self.execute_nmb_button = QPushButton("Execute NMB")
+        self.execute_nmb_button.setObjectName("ExecuteNMBButton")
         self.execute_nmb_button.clicked.connect(self.execute_nmb)
         self.nmb_layout.addWidget(self.execute_nmb_button)
 
@@ -833,11 +902,10 @@ class MainWindow(QMainWindow):
         self.update_argument_fields()
 
     def initialize_mode_arguments(self):
-        # need to review this further 
         self.mode_arguments = {
             "deploy": {
-                "drone": "Text",
                 "client-name": "Text",
+                "targets-file": "File",
                 "scope": ["core", "nc", "custom"],
                 "exclude-file": "File",
                 "discovery": "Checkbox",
@@ -845,40 +913,35 @@ class MainWindow(QMainWindow):
                 "eyewitness": "Checkbox"
             },
             "create": {
-                "drone": "Text",
                 "client-name": "Text",
                 "scope": ["core", "nc", "custom"],
                 "exclude-file": "File",
+                "targets-file": "File",
                 "discovery": "Checkbox"
             },
             "launch": {
-                "drone": "Text",
                 "client-name": "Text"
             },
             "pause": {
-                "drone": "Text",
                 "client-name": "Text"
             },
             "resume": {
-                "drone": "Text",
                 "client-name": "Text"
             },
             "monitor": {
-                "drone": "Text",
                 "client-name": "Text"
             },
             "export": {
-                "drone": "Text",
                 "client-name": "Text"
             },
             "internal": {
-                "drone": "Text",
+                "csv-file": "File",
                 "local": "Checkbox",
                 "guess": "Checkbox",
                 "eyewitness": "Checkbox"
             },
             "external": {
-                "drone": "Text",
+                "csv-file": "File",
                 "local": "Checkbox",
                 "guess": "Checkbox",
                 "eyewitness": "Checkbox"
@@ -901,11 +964,9 @@ class MainWindow(QMainWindow):
                 "force": "Checkbox"
             },
             "regen": {
-                # No arguments required for "regen" mode
+                # No arguments required for regen mode
             }
         }
-
-
 
     def update_argument_fields(self):
         selected_mode = self.mode_combobox.currentText()
@@ -973,8 +1034,9 @@ class MainWindow(QMainWindow):
 
         # Construct command as a list of arguments
         mode = self.mode_combobox.currentText()
-        command_args = ["python", "nmb.py", "-m", mode, "-u", username, "-p", password]
+        command_args = ["python", "nmb.py", "-m", mode, "-u", username, "-p", password, "-d", host]
 
+        # Add other arguments from the form
         for arg, widget in self.argument_fields.items():
             if isinstance(widget, QLineEdit):
                 value = widget.text().strip()
@@ -995,8 +1057,10 @@ class MainWindow(QMainWindow):
         self.nmb_thread.output_signal.connect(self.update_output)
         self.nmb_thread.start()
 
+
     def update_output(self, text):
         self.nmb_output.append(text)
+
 
     def populate_log_sessions_list(self):
         self.log_sessions_combo.clear()
@@ -1118,8 +1182,6 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Error", f"Failed to fetch tmux sessions: {str(e)}")
             return None
 
-
-
     def open_terminal_ssh(self):
         drone_id = self.drone_selector.currentText()
         if not drone_id:
@@ -1233,7 +1295,7 @@ class MainWindow(QMainWindow):
         dialog.show()
         QApplication.processEvents()
         remote_path = self.download_file_path.text()
-        local_path = self.download_local_path.text()
+        local_path = self.download_local_path.text() # need to fix for windows
         # Use existing drone connection details
         host, username, password = self.get_current_drone_connection()
         if self.scp_transfer(host, username, password, remote_path, local_path, upload=False):
@@ -1298,31 +1360,6 @@ class MainWindow(QMainWindow):
         else:
             QMessageBox.warning(self, "No Connection", "No current drone connection found.")
 
-
-    def save_module(self):
-        if not self.current_module_path:
-            QMessageBox.warning(self, "Error", "No module loaded.")
-            return
-
-        module_content = self.module_editor.toPlainText()
-        try:
-            with open(self.current_module_path, 'w') as file:
-                file.write(module_content)
-            QMessageBox.information(self, "Success", "Module saved successfully.")
-        except Exception as e:
-            QMessageBox.warning(self, "Error", f"Failed to save module: {e}")
-
-    
-    def load_module_into_editor(self, module_path):
-        self.current_module_path = module_path
-        try:
-            with open(module_path, 'r') as file:
-                content = file.read()
-                self.module_editor.setPlainText(content)
-                self.set_syntax_highlighter(module_path)
-        except Exception as e:
-            QMessageBox.warning(self, "Error", f"Failed to load module: {e}")
-
             
     def set_syntax_highlighter(self, module_path):
         if module_path.endswith('.sh'):
@@ -1344,15 +1381,14 @@ class MainWindow(QMainWindow):
                 self.moduleComboBox.addItem(filename)
         
     def on_tab_changed(self, index):
-        if index != -1:
-            tab_info = self.tab_widget.tabText(index)
-            self.update_status_bar(f"Active connection: {tab_info}")
-        else:
-            self.update_status_bar()
-        
-        
-    def update_status_bar(self, text="No active connection"):
-        self.statusBar.showMessage(text)    
+        nmb_tab_index = 4 # assumes NMB is index 4. this will need to change if we add more tabs that overtake this slot
+        is_nmb_tab_selected = self.tab_widget.currentIndex() == nmb_tab_index
+
+        # Show/Hide module selection layout
+        self.module_label.setVisible(not is_nmb_tab_selected)
+        self.moduleComboBox.setVisible(not is_nmb_tab_selected)
+        self.module_search.setVisible(not is_nmb_tab_selected)
+        self.module_button.setVisible(not is_nmb_tab_selected)
     
     def populate_drones(self):
         for drone_id in self.drones:
@@ -1413,7 +1449,6 @@ class MainWindow(QMainWindow):
 
         # Setup SSH Thread
         tab.ssh_thread = SSHThread(host, username, password, command, is_script_path)
-        self.update_status_bar(f"Connected to: {username}@{host}")
         tab.ssh_thread.update_output.connect(lambda output: self.handle_ssh_output(output, tab, log_file_path))
         tab.ssh_thread.start()
         self.threads.append(tab.ssh_thread)
@@ -1479,7 +1514,9 @@ class MainWindow(QMainWindow):
             return
         self.current_module = selected_module
 
-        module_path = os.path.join("modules", selected_module)
+        # Use temporary file if available, otherwise use the original file
+        module_path = self.temp_file.name if self.temp_file else os.path.join("modules", selected_module)
+
         drone_id = self.drone_selector.currentText()
         host, username, password = self.drones[drone_id]
 
@@ -1496,7 +1533,7 @@ class MainWindow(QMainWindow):
                         self.open_tab_group(tab_info["command"], False, group_name, group_color)
             return
 
-        if selected_module.endswith(('.py', '.sh')):
+        elif selected_module.endswith(('.py', '.sh')):
             args_dialog = CommandLineArgsDialog(module_path, host, username, password, self)
             args = ""
             file_paths = {}
@@ -1505,7 +1542,7 @@ class MainWindow(QMainWindow):
                     args, file_paths = args_dialog.get_arguments()
             full_command = (f"{module_path} {args}", file_paths)
             self.add_ssh_tab(host, username, password, full_command, is_script_path=True)
-            
+
     def open_tab_group(self, command, is_script_path=True, group_name=None, group_color=None):
         drone_id = self.drone_selector.currentText()
         host, username, password = self.drones[drone_id]

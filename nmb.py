@@ -27,32 +27,6 @@ class CredentialsCache:
     def get_creds(self):
         return self.username, self.password
 
-
-def select_file(file_type):
-    files = glob(f"*.{file_type}")
-    
-    # Filter out 'requirements.txt'
-    files = [f for f in files if f != 'requirements.txt']
-
-    if not files:
-        log.error(f"No {file_type} files found in the current directory.")
-        sys.exit()
-    elif len(files) == 1:
-        return files[0]
-    else:
-        log.info(f"Multiple {file_type} files found in the current directory.")
-        for idx, file in enumerate(files, 1):
-            print(f"{idx}. {file}")
-        while True:
-            try:
-                choice = int(input(f"Enter the number of the {file_type} file: "))
-                if 1 <= choice <= len(files):
-                    return files[choice - 1]
-            except ValueError:
-                pass
-            print("Invalid choice. Please enter a valid number.")
-
-
 def find_policy_file(project_scope):
     policies = {
         'core': "Default Good Model Nessus Vulnerability Policy.nessus",
@@ -123,8 +97,8 @@ def handle_mode(args, mode, required_args, handler_info):
                 else:
                     handler_args.append(result)
             
-            # Call the handler class with both positional and keyword arguments
             handler_class(*handler_args, **handler_kwargs)
+
     except Exception as e:
         log.error(f"An error occurred during {mode} execution: {str(e)}")
 
@@ -162,7 +136,7 @@ def main():
                                        lambda args: args.immuni_app_name]
         },
         "deploy": {
-            "required_args": ["client", "drone", "project_type"],
+            "required_args": ["client", "drone", "project_type", "targets_file"],
             "handler_classes_with_args_providers": [
                 (Nessus, [
                     lambda args: args.drone, 
@@ -170,12 +144,12 @@ def main():
                     lambda _: args.mode,
                     lambda args: args.client,
                     lambda args: find_policy_file(args.project_type), 
-                    lambda _: select_file('txt'),
+                    lambda args: args.targets_file,
                     lambda args: args.exclude_file, 
                     lambda args: args.discovery
                 ]),
                 (Lackey, [
-                    lambda _: select_file('csv'),
+                    lambda args: args.csv_file or f"{args.client}.csv",
                     lambda _: None,
                     lambda args: determine_execution_mode(args),
                     lambda _: creds_cache.get_creds() if not getattr(args, 'local', False) else (None, None),
@@ -186,9 +160,9 @@ def main():
             ]
         },
         "internal": {
-            "required_args": ["drone"],
+            "required_args": ["drone", "csv_file"],
             "handler_class": Lackey,
-            "handler_args_providers": [lambda _: select_file('csv'),
+            "handler_args_providers": [lambda args: args.csv_file,
                                        lambda _: None,
                                        lambda args: determine_execution_mode(args),
                                        lambda _: creds_cache.get_creds() if not getattr(args, 'local', False) else (None, None),
@@ -197,9 +171,9 @@ def main():
                                        lambda args: args.run_eyewitness]
         },
         "external": {
-            "required_args": ["drone"],
+            "required_args": ["drone", "csv_file"],
             "handler_class": Lackey,
-            "handler_args_providers": [lambda _: select_file('csv'),
+            "handler_args_providers": [lambda args: args.csv_file,
                                        lambda _: True,
                                        lambda args: determine_execution_mode(args),
                                        lambda _: creds_cache.get_creds() if not getattr(args, 'local', False) else (None, None),
@@ -208,14 +182,14 @@ def main():
                                        lambda args: args.run_eyewitness]
         },
         "create": {
-            "required_args": ["client", "drone", "project_type"],
+            "required_args": ["client", "drone", "project_type", "targets_file"],
             "handler_class": Nessus,
             "handler_args_providers": [lambda args: args.drone, 
                                        lambda _: creds_cache.get_creds(),
                                        lambda _: args.mode,
                                        lambda args: args.client,
                                        lambda args: find_policy_file(args.project_type), 
-                                       lambda _: select_file('txt'),
+                                       lambda args: args.targets_file,
                                        lambda args: args.exclude_file, 
                                        lambda args: args.discovery]
         },
@@ -318,6 +292,10 @@ def parse_arguments():
     # UTIL
     parser.add_argument("-u", "--username", required=False, help="Username for the drone")
     parser.add_argument("-p", "--password", required=False, help="Password for the drone")
+    parser.add_argument("--targets-file", required=False, help="Path to the txt file")
+    parser.add_argument("--csv-file", required=False, help="Path to the csv file")
+
+
 
     # WEB
     parser.add_argument("-uf", "--burp-user-file", dest="burp_target_user_file", required=False, help="Username file of targetsite")

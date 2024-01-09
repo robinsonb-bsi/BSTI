@@ -15,3 +15,5 @@
 - tmux session attaching
 - test if drone is up before connecting
 - fixes to '_' being required instead of spaces for module descriptions
+- NMB integrated fully
+- tempfile used as execution script if edits are made, saving makes it permanent 
