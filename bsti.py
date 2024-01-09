@@ -4,9 +4,11 @@
 
 import sys
 import os
-from PyQt5.QtWidgets import (QApplication, QCheckBox, QLabel, QAction, QTabBar, QStyle, QPlainTextEdit, QMainWindow, QGridLayout, QHBoxLayout, QTabWidget, QTextEdit, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QDialog, QLineEdit, QFormLayout, QMessageBox, QComboBox)
+import pandas as pd
+from PyQt5.QtWidgets import (QApplication, QTableWidget, QTableWidgetItem, QCheckBox, QLabel, QAction, QTabBar, QStyle, QPlainTextEdit, QMainWindow, QGridLayout, QHBoxLayout, QTabWidget, QTextEdit, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QDialog, QLineEdit, QFormLayout, QMessageBox, QComboBox)
 from PyQt5.QtCore import QThread, pyqtSignal, QUrl, QRegExp, Qt
 from PyQt5.QtGui import QTextCursor, QSyntaxHighlighter, QTextCharFormat, QColor, QDesktopServices
+from PyQt5.QtWebEngineWidgets import QWebEngineView
 import paramiko
 from scp import SCPClient
 import tempfile
@@ -19,9 +21,11 @@ import re
 
 # TODO 
 """
-Integration with n2p tabs/menu bar
-depends and auto install ? or leave to module creator
 organize code :(
+Integration with n2p tabs/menu bar
+home page diagnostics
+render html, csv results from NMB/interpreter 
+open NMB json for editing
 
 
 # Done
@@ -651,6 +655,13 @@ class MainWindow(QMainWindow):
 
         # Menu Bar Init
         self.menu_bar = self.menuBar()
+
+        self.file_menu = self.menu_bar.addMenu("File")
+        self.open_file_action = QAction("Open File", self)
+        self.open_file_action.triggered.connect(self.open_file)
+        self.file_menu.addAction(self.open_file_action)
+
+
         self.drone_menu = self.menu_bar.addMenu("Config")
         self.module_menu = self.menu_bar.addMenu("Modules")
         self.terminal_menu = self.menu_bar.addMenu("Terminal")
@@ -814,6 +825,60 @@ class MainWindow(QMainWindow):
 
         # hide/show tabs based on active tab
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
+
+
+    def open_file(self):
+        options = QFileDialog.Options()
+        file_name, _ = QFileDialog.getOpenFileName(self, "Open File", "", "All Supported Files (*.csv *.json *.html);; CSV Files (*.csv);;JSON Files (*.json);;HTML Files (*.html)", options=options)
+        if file_name:
+            tab = QWidget()
+            tab.is_custom_tab = True
+            layout = QVBoxLayout(tab)
+
+            # Check file extension and render content accordingly
+            if file_name.lower().endswith('.csv'):
+                # Use pandas to read CSV and display in a QTableWidget
+                df = pd.read_csv(file_name)
+                table = self.create_table_from_dataframe(df)
+                layout.addWidget(table)
+            elif file_name.lower().endswith('.json'):
+                # Display JSON in a QTextEdit with formatting
+                with open(file_name, 'r') as file:
+                    content = file.read()
+                    text_edit = QTextEdit()
+                    text_edit.setPlainText(content)
+                    layout.addWidget(text_edit)
+            elif file_name.lower().endswith('.html'):
+                # Display HTML in a QWebEngineView
+                web_view = QWebEngineView()
+                web_view.load(QUrl.fromLocalFile(os.path.abspath(file_name)))
+                layout.addWidget(web_view)
+
+            self.tab_widget.addTab(tab, os.path.basename(file_name))
+            # Add close button to the tab
+            close_button = QPushButton()
+            close_button.setIcon(self.style().standardIcon(QStyle.SP_DockWidgetCloseButton))
+            close_button.setStyleSheet("QPushButton { border: none; }")
+            close_button.setFixedSize(16, 16)
+            close_button.setToolTip("Close Tab")
+            close_button.setProperty('tab_widget', tab)  # Set the property to tab
+            close_button.clicked.connect(self.close_tab_from_button)
+
+            self.tab_widget.tabBar().setTabButton(self.tab_widget.indexOf(tab), QTabBar.RightSide, close_button)
+        
+    def create_table_from_dataframe(self, df):
+        table = QTableWidget()
+        table.setRowCount(df.shape[0])
+        table.setColumnCount(df.shape[1])
+        table.setHorizontalHeaderLabels(df.columns)
+
+        for i, row in df.iterrows():
+            for j, value in enumerate(row):
+                item = QTableWidgetItem(str(value))
+                table.setItem(i, j, item)
+
+        return table
+    
 
     def save_module(self):
         if not self.current_module_path or not self.temp_file:
@@ -1417,10 +1482,14 @@ class MainWindow(QMainWindow):
 
     def close_tab(self, index):
         tab = self.tab_widget.widget(index)
-        if hasattr(tab, 'is_ssh_tab') and tab.is_ssh_tab:
-            if hasattr(tab, 'ssh_thread'):
-                tab.ssh_thread.stop()
-                tab.ssh_thread.wait()
+        if tab is not None:
+            if hasattr(tab, 'is_ssh_tab') and tab.is_ssh_tab:
+                # Handle SSH tab specific logic
+                if hasattr(tab, 'ssh_thread'):
+                    tab.ssh_thread.stop()
+                    tab.ssh_thread.wait()
+            elif hasattr(tab, 'is_custom_tab') and tab.is_custom_tab:
+                pass # do nothing here since file will just get closed
             self.tab_widget.removeTab(index)
         else:
             print(f"Tab at index {index} is not an SSH tab and cannot be closed.")
@@ -1428,10 +1497,9 @@ class MainWindow(QMainWindow):
     def close_tab_from_button(self):
         button = self.sender()
         if button and button.property('tab_widget'):
-            tab_widget = button.property('tab_widget')
-            index = self.tab_widget.indexOf(tab_widget)
+            tab = button.property('tab_widget')
+            index = self.tab_widget.indexOf(tab)
             self.close_tab(index)
-
 
     def add_ssh_tab(self, host, username, password, command, is_script_path=True, group_name="", group_color=None):
         tab = QTextEdit()

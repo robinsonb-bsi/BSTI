@@ -3,7 +3,7 @@
 # targets.txt "Targets description"
 # ENDFILES
 # ARGS
-# NSE "NSE Query String"
+# ARG1 "Sample ARG"
 # ENDARGS
 # AUTHOR:
 cat /tmp/targets.txt
