@@ -1,6 +1,6 @@
 #!/bin/bash
 # ARGS
-# File "Path_to_targets_txt"
+# File "Path to targets.txt"
 # ENDARGS
 # AUTHOR: Mitchell
 

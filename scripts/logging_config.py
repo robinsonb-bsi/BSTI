@@ -1,6 +1,6 @@
 import logging
 import colorlog
-
+import os
 # Define the custom logging level for success
 SUCCESS = 35
 logging.SUCCESS = SUCCESS
@@ -36,7 +36,12 @@ console_handler = logging.StreamHandler()
 console_handler.setFormatter(formatter)
 log.addHandler(console_handler)
 
+# Ensure the directory exists
+nmb_log_dir = os.path.join("logs", "nmb")
+os.makedirs(nmb_log_dir, exist_ok=True)
+
 # File Handler
-file_handler = logging.FileHandler('NMB_output.log') 
+nmb_log_file_path = os.path.join(nmb_log_dir, 'NMB_output.log')
+file_handler = logging.FileHandler(nmb_log_file_path) 
 file_handler.setFormatter(formatter)
 log.addHandler(file_handler)

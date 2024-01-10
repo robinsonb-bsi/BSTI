@@ -17,3 +17,5 @@
 - fixes to '_' being required instead of spaces for module descriptions
 - NMB integrated fully
 - tempfile used as execution script if edits are made, saving makes it permanent 
+- n2p somewhat viable - no reportgen yet
+- view nmb logs in the UI now

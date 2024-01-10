@@ -970,7 +970,8 @@ class MainWindow(QMainWindow):
 
 
     def create_report(self):
-        self.execute_script_in_tab("create_report_script.py", "Create Report")
+        # not added yet
+        pass
 
     def report_findings_execution(self):
         # Open the dialog to get arguments
@@ -1344,18 +1345,40 @@ class MainWindow(QMainWindow):
     def populate_log_sessions_list(self):
         self.log_sessions_combo.clear()
         log_dir = os.path.join("logs")
+        excluded_dirs = ["nmb"]  
+
         if os.path.exists(log_dir):
             for session in sorted(os.listdir(log_dir)):
-                self.log_sessions_combo.addItem(session)
+                if os.path.isdir(os.path.join(log_dir, session)) and session not in excluded_dirs:
+                    self.log_sessions_combo.addItem(session)
+
+        # Add NMB_output.log to the combo box if it exists
+        nmb_log_file_path = os.path.join("logs", "nmb", "NMB_output.log")
+        if os.path.exists(nmb_log_file_path):
+            self.log_sessions_combo.addItem("NMB_output.log")
 
     def load_log_content(self, index):
         log_dir = os.path.join("logs")
         session_name = self.log_sessions_combo.itemText(index)
-        log_file_path = os.path.join(log_dir, session_name, "BSTI.log")
+        bsti_log_file_path = os.path.join(log_dir, session_name, "BSTI.log")
+        nmb_log_file_path = os.path.join("logs", "nmb", "NMB_output.log")
 
-        if os.path.exists(log_file_path):
-            with open(log_file_path, 'r') as file:
-                self.log_content_area.setText(file.read())
+        log_content = ""
+
+        # Load content from BSTI.log if it exists
+        if os.path.exists(bsti_log_file_path):
+            with open(bsti_log_file_path, 'r') as file:
+                log_content += file.read()
+
+        # Load content from NMB_output.log if it exists
+        if session_name == "NMB_output.log" and os.path.exists(nmb_log_file_path):
+            with open(nmb_log_file_path, 'r') as file:
+                if log_content:
+                    log_content += "----------------------------------------"
+                log_content += file.read()
+
+        if log_content:
+            self.log_content_area.setText(log_content)
         else:
             self.log_content_area.clear()
 
@@ -1367,10 +1390,13 @@ class MainWindow(QMainWindow):
             try:
                 for session in os.listdir(log_dir):
                     session_path = os.path.join(log_dir, session)
-                    for log_file in os.listdir(session_path):
-                        os.remove(os.path.join(session_path, log_file))
-                    os.rmdir(session_path)
-                self.populate_log_sessions_list()  # Refresh the log sessions list
+                    if os.path.isdir(session_path):
+                        for log_file in os.listdir(session_path):
+                            os.remove(os.path.join(session_path, log_file))
+                        os.rmdir(session_path)
+                    elif session == "nmb_output.log":
+                        os.remove(session_path)
+                self.populate_log_sessions_list() 
             except Exception as e:
                 QMessageBox.warning(self, "Error", f"Failed to delete logs: {e}")
 
@@ -1557,31 +1583,52 @@ class MainWindow(QMainWindow):
         dialog = WaitingDialog("Uploading file, please wait...", self)
         dialog.show()
         QApplication.processEvents()
+
         local_path = self.upload_file_path.text()
-        remote_path = self.upload_remote_path.text()
+        remote_dir = self.upload_remote_path.text()
+
+        # Extract the filename from the local path
+        remote_filename = os.path.basename(local_path)
+        # Combine the remote directory and filename
+        remote_full_path = os.path.join(remote_dir, remote_filename).replace('\\', '/')
+        
         # Use existing drone connection details
         host, username, password = self.get_current_drone_connection()
-        if not self.is_valid_remote_path(host, username, password, remote_path):
+        if not self.is_valid_remote_path(host, username, password, remote_dir):
             QMessageBox.warning(self, "Invalid Path", "The specified remote path is invalid.")
             dialog.close()
             return
-        if self.scp_transfer(host, username, password, local_path, remote_path, upload=True):
-            QMessageBox.information(self, "Success", "File successfully uploaded.")
+
+        try:
+            if self.scp_transfer(host, username, password, remote_full_path, local_path, upload=True):
+                QMessageBox.information(self, "Success", "File successfully uploaded.")
+        except Exception as e:
+            print(e)
+
         dialog.close()
+
 
     def download_file(self):
         dialog = WaitingDialog("Downloading file, please wait...", self)
         dialog.show()
         QApplication.processEvents()
+        
         remote_path = self.download_file_path.text()
-        local_path = self.download_local_path.text() # need to fix for windows
+        local_path = self.download_local_path.text()
+
+        # Normalize the local path for Windows
+        local_path = os.path.normpath(local_path)
+
         # Use existing drone connection details
         host, username, password = self.get_current_drone_connection()
         if self.scp_transfer(host, username, password, remote_path, local_path, upload=False):
             QMessageBox.information(self, "Success", "File successfully downloaded.")
+        else:
+            QMessageBox.warning(self, "Error", "Failed to download the file.")
+
         dialog.close()
 
-    def scp_transfer(self, host, username, password, local_path, remote_path, upload):
+    def scp_transfer(self, host, username, password, remote_path, local_path, upload):
         try:
             with paramiko.SSHClient() as ssh:
                 ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -1592,9 +1639,13 @@ class MainWindow(QMainWindow):
                     else:
                         scp.get(remote_path, local_path)
             return True
-        except Exception as e:
-            QMessageBox.warning(self, "Transfer Error", str(e))
+        except FileNotFoundError:
+            print(f"File not found: {local_path}")
             return False
+        except Exception as e:
+            print(f"General Transfer Error: {e}")
+            return False
+
 
     def get_current_drone_connection(self):
         drone_id = self.drone_selector.currentText()
