@@ -30,8 +30,6 @@ Bulletproof Solutions Testing Interface
 
 ## 📍 Overview
 
-
-
 ### Features
 
 
@@ -164,3 +162,9 @@ BSTI also has an option to include file upload as part of the modules execution 
 This is useful for instance if you want to create a module that uses nmap, and you want to specify a file for the targets. This way you don't have to go through a seperate process of creating the target file on the bstg and remembering the remote path. You can just create the file locally and upload it when you execute the module.
 
 The files that are uploaded are automatically stored in the /tmp/ directory.
+
+## Contributing to BSTI
+
+Interested in contributing to this project?
+
+Check out the dev guide [here](https://github.com/fancyc-bsi/BSTI/blob/main/DEVGUIDE.md).
