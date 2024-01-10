@@ -1,6 +1,6 @@
 <div align="center">
   <h1 align="center">
-    <img src="https://github.com/fancyc-bsi/BSTI/blob/master/assets/bsti.png?raw=true" width="100" />
+    <img src="https://github.com/myname/BSTI/blob/main/assets/bsti.png?raw=true" width="100" />
     <br>
   </h1>
 </div>
