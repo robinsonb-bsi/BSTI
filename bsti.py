@@ -8,7 +8,7 @@ import pandas as pd
 from PyQt5.QtWidgets import (QApplication, QDialogButtonBox, QTableWidget, QTableWidgetItem, QCheckBox, QLabel, QAction, QTabBar, QStyle, QPlainTextEdit, QMainWindow, QGridLayout, QHBoxLayout, QTabWidget, QTextEdit, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QDialog, QLineEdit, QFormLayout, QMessageBox, QComboBox)
 from PyQt5.QtCore import QThread, pyqtSignal, QUrl, QRegExp, Qt, QProcess
 from PyQt5.QtGui import QTextCursor, QFont, QSyntaxHighlighter, QTextCharFormat, QColor, QDesktopServices
-from PyQt5.QtWebEngineWidgets import QWebEngineView
+from PyQt5.QtWebKitWidgets import QWebView
 import paramiko
 from scp import SCPClient
 import tempfile
@@ -1060,10 +1060,13 @@ class MainWindow(QMainWindow):
                 text_edit.setFont(QFont("Courier", 10))
                 layout.addWidget(text_edit)
             elif file_name.lower().endswith('.html'):
-                # Display HTML in a QWebEngineView
-                web_view = QWebEngineView()
-                web_view.load(QUrl.fromLocalFile(os.path.abspath(file_name)))
-                layout.addWidget(web_view)
+                try:
+                    # Display HTML in a QWebEngineView
+                    web_view = QWebView()
+                    web_view.load(QUrl.fromLocalFile(os.path.abspath(file_name)))
+                    layout.addWidget(web_view)
+                except Exception as e:
+                    print("ERROR:", e) 
 
             self.tab_widget.addTab(tab, os.path.basename(file_name))
             # Add close button to the tab
