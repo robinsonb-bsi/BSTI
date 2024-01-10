@@ -4,11 +4,12 @@
 # searchsploit "Query String"
 # MSF "MSF Search String"
 # ENDARGS
+# Author: Mitchell Kerns
 
 # Updates: Uncomment if you want to update these.
 # sudo apt update
 # searchsploit -u
-# msfupdate
+# sudo apt install metasploit-framework
 
 # Assign arguments to variables
 nse_query="$1"
