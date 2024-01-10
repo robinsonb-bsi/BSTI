@@ -1,4 +1,5 @@
 #!/bin/bash
+# Author: Mitchell Kerns
 
 sudo apt update -y
 
