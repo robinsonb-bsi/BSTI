@@ -1,6 +1,6 @@
 <div align="center">
 <h1 align="center">
-<img src="(https://github.com/fancyc-bsi/BSTI/assets/85493503/19370b1f-d7fc-4a7d-b741-da60ef4d33d5)
+<img src="(https://github.com/fancyc-bsi/BSTI/assets/bsti.png)
 " width="100" /> 
 <br>
 Bulletproof Solutions Testing Interface
@@ -24,7 +24,16 @@ Bulletproof Solutions Testing Interface
     - [Debian based OS](#debian-based-os)
   - [💻 Installation](#-installation)
 - [🎮 Using BSTI](#-using-bsti)
+  - [Connecting](#connecting)
+  - [Home Tab](#home-tab)
+  - [Module Editor](#module-editor)
+  - [File Transfer](#file-transfer)
+  - [View Logs](#view-logs)
   - [Modules](#modules)
+    - [JSON Format](#json-format)
+    - [Argument Metadata Comments](#argument-metadata-comments)
+    - [File Upload Metadata Comments](#file-upload-metadata-comments)
+- [Contributing to BSTI](#contributing-to-bsti)
 
 ---
 
