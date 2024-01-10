@@ -157,7 +157,10 @@ Your module will be reviewed by the BSTI maintainers and, upon approval, integra
 ## Removing ANSI Color Codes
 
 Currently BSTI doesn't handle the ANSI characters that are responsible for color coding text on linux. For interactive programs or ones that have continuous output (like responder) there is no workaround currently that we're aware of...  
-For programs/commands with a static output, however, you can strip the ANSI codes from the output with the following syntax. Simply pipe your command into the following:
+
+However, if you use BSTI to take a screenshot of the log - the ANSI characters will be automatically stripped.
+
+For programs/commands with a static output; you can strip the ANSI codes from the output with the following syntax. Simply pipe your command into the following:
 ```
 | sed 's/\x1b\[[0-9;]*m//g'
 ```
@@ -165,3 +168,4 @@ As an example, here is how you might use this with a metasploit script:
 ```
 msfconsole -q -x "use auxiliary/scanner/rdp/ms12_020_check; set RHOSTS $1; set RPORT 3389; run; exit" | sed 's/\x1b\[[0-9;]*m//g'
 ```
+
