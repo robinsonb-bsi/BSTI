@@ -5,8 +5,8 @@
 import sys
 import os
 import pandas as pd
-from PyQt5.QtWidgets import (QApplication, QTableWidget, QTableWidgetItem, QCheckBox, QLabel, QAction, QTabBar, QStyle, QPlainTextEdit, QMainWindow, QGridLayout, QHBoxLayout, QTabWidget, QTextEdit, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QDialog, QLineEdit, QFormLayout, QMessageBox, QComboBox)
-from PyQt5.QtCore import QThread, pyqtSignal, QUrl, QRegExp, Qt
+from PyQt5.QtWidgets import (QApplication, QDialogButtonBox, QTableWidget, QTableWidgetItem, QCheckBox, QLabel, QAction, QTabBar, QStyle, QPlainTextEdit, QMainWindow, QGridLayout, QHBoxLayout, QTabWidget, QTextEdit, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QDialog, QLineEdit, QFormLayout, QMessageBox, QComboBox)
+from PyQt5.QtCore import QThread, pyqtSignal, QUrl, QRegExp, Qt, QProcess
 from PyQt5.QtGui import QTextCursor, QFont, QSyntaxHighlighter, QTextCharFormat, QColor, QDesktopServices
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 import paramiko
@@ -22,7 +22,7 @@ import re
 # TODO 
 """
 organize code :(
-Integration with n2p tabs/menu bar
+Integration with n2p tabs/menu bar --> main execution is done, need to figure out report gen and plugin manager
 home page diagnostics
 parser for csv built-in
 metadata for modules to map to nessus findings, then convert to md5 when saving the screenshot
@@ -244,6 +244,7 @@ class CommandLineArgsDialog(QDialog):
             layout.addLayout(file_input_layout)
 
         self.submit_button = QPushButton('Submit', self)
+        self.submit_button.setCursor(Qt.PointingHandCursor)
         # self.submit_button.clicked.connect(self.accept)
         self.submit_button.clicked.connect(self.on_submit)
         layout.addWidget(self.submit_button)
@@ -473,6 +474,7 @@ class DroneConfigDialog(QDialog):
         self.layout.addRow('Password:', self.password_input)
 
         self.submit_button = QPushButton('Save', self)
+        self.submit_button.setCursor(Qt.PointingHandCursor)
         self.submit_button.clicked.connect(self.accept)
         self.layout.addRow(self.submit_button)
 
@@ -608,6 +610,7 @@ class TmuxSessionDialog(QDialog):
 
         # Submit button
         self.submit_button = QPushButton("Connect", self)
+        self.submit_button.setCursor(Qt.PointingHandCursor)
         self.submit_button.clicked.connect(self.on_submit)
         layout.addWidget(self.submit_button)
 
@@ -635,6 +638,128 @@ class NMBRunnerThread(QThread):
             if output:
                 self.output_signal.emit(output.strip())
 
+class N2PArgsDialog(QDialog):
+    def __init__(self, parent=None):
+        super(N2PArgsDialog, self).__init__(parent)
+        self.layout = QVBoxLayout(self)
+        self.layout.setSpacing(10)
+        self.layout.setContentsMargins(10, 10, 10, 10)
+
+        # Create widgets for each argument
+        self.username_edit = QLineEdit(self)
+        self.password_edit = QLineEdit(self)
+        self.password_edit.setEchoMode(QLineEdit.Password)
+        self.client_id_edit = QLineEdit(self)
+        self.report_id_edit = QLineEdit(self)
+        self.scope_edit = QComboBox(self)
+        self.scope_edit.addItems(["", "internal", "external"])
+
+        # Directory field with Browse button
+        self.directory_layout = QHBoxLayout()
+        self.directory_edit = QLineEdit(self)
+        self.directory_browse_button = QPushButton("Browse")
+        self.directory_browse_button.clicked.connect(self.browse_directory)
+        self.directory_layout.addWidget(self.directory_edit)
+        self.directory_layout.addWidget(self.directory_browse_button)
+
+        # Screenshot Directory field with Browse button
+        self.screenshot_dir_layout = QHBoxLayout()
+        self.screenshot_dir_edit = QLineEdit(self)
+        self.screenshot_dir_browse_button = QPushButton("Browse")
+        self.screenshot_dir_browse_button.clicked.connect(self.browse_screenshot_directory)
+        self.screenshot_dir_layout.addWidget(self.screenshot_dir_edit)
+        self.screenshot_dir_layout.addWidget(self.screenshot_dir_browse_button)
+
+        self.target_plextrac_edit = QComboBox(self)
+        self.target_plextrac_edit.addItems(["report"])
+        self.non_core_check = QCheckBox("Non-core custom fields", self)
+
+        # Add widgets to the layout
+        self.layout.addWidget(QLabel("Username"))
+        self.layout.addWidget(self.username_edit)
+        self.layout.addWidget(QLabel("Password"))
+        self.layout.addWidget(self.password_edit)
+        self.layout.addWidget(QLabel("Client ID"))
+        self.layout.addWidget(self.client_id_edit)
+        self.layout.addWidget(QLabel("Report ID"))
+        self.layout.addWidget(self.report_id_edit)
+        self.layout.addWidget(QLabel("Scope"))
+        self.layout.addWidget(self.scope_edit)
+        self.layout.addWidget(QLabel("Evidence Directory"))
+        self.layout.addLayout(self.directory_layout)
+        self.layout.addWidget(QLabel("Screenshot Directory"))
+        self.layout.addLayout(self.screenshot_dir_layout)
+        self.layout.addWidget(QLabel("Target Plextrac"))
+        self.layout.addWidget(self.target_plextrac_edit)
+        self.layout.addWidget(self.non_core_check)
+
+        # Add a button box
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        self.layout.addWidget(button_box)
+
+        self.apply_custom_styles()
+
+    def apply_custom_styles(self):
+        self.setStyleSheet("""
+        QDialog {
+            background-color: #282a36;
+            border-radius: 8px;
+        }
+        QLabel {
+            color: #f8f8f2;
+        }
+        QLineEdit, QComboBox, QPushButton, QCheckBox {
+            background-color: #44475a;
+            border-radius: 5px;
+            padding: 5px;
+            border: 1px solid #6272a4;
+            color: #f8f8f2;
+        }
+        QLineEdit {
+            padding-left: 10px;
+        }
+        QPushButton {
+            min-height: 30px;
+            border: none;
+        }
+        QPushButton:hover {
+            background-color: #6272a4;
+        }
+        QPushButton:pressed {
+            background-color: #50fa7b;
+        }
+        QDialogButtonBox {
+            button-layout: 2;
+        }
+        """)
+
+
+    def browse_directory(self):
+        directory = QFileDialog.getExistingDirectory(self, "Select Directory")
+        if directory:
+            self.directory_edit.setText(directory)
+
+    def browse_screenshot_directory(self):
+        directory = QFileDialog.getExistingDirectory(self, "Select Screenshot Directory")
+        if directory:
+            self.screenshot_dir_edit.setText(directory)
+
+
+    def get_arguments(self):
+        # Return the entered arguments
+        return {
+            'username': self.username_edit.text(),
+            'password': self.password_edit.text(),
+            'clientID': self.client_id_edit.text(),
+            'reportID': self.report_id_edit.text(),
+            'scope': self.scope_edit.currentText(),
+            'directory': self.directory_edit.text(),
+            'targettedplextrac': self.target_plextrac_edit.currentText(),
+            'screenshot_dir': self.screenshot_dir_edit.text(),
+            'noncore': self.non_core_check.isChecked(),
+        }
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -693,6 +818,16 @@ class MainWindow(QMainWindow):
         self.connect_tmux_action.triggered.connect(self.on_connect_tmux_triggered)
         self.terminal_menu.addAction(self.connect_tmux_action)
 
+        # Reporting menu - n2p
+        self.report_menu = self.menu_bar.addMenu("Reports")
+        self.create_report_action = QAction("Create Report", self)
+        self.create_report_action.triggered.connect(self.create_report)
+        self.report_menu.addAction(self.create_report_action)
+
+        self.report_findings_action = QAction("Report Findings", self)
+        self.report_findings_action.triggered.connect(self.report_findings_execution)
+        self.report_menu.addAction(self.report_findings_action)
+
 
         # Drone selection layout
         self.droneSelectionLayout = QHBoxLayout()
@@ -715,6 +850,7 @@ class MainWindow(QMainWindow):
         self.module_editor.textChanged.connect(self.handle_module_edit)
         self.module_editor_layout.addWidget(self.module_editor)
         self.save_button = QPushButton("Save Module")
+        self.save_button.setCursor(Qt.PointingHandCursor)
         self.save_button.clicked.connect(self.save_module)
         self.module_editor_layout.addWidget(self.save_button)
         self.tab_widget.addTab(self.module_editor_tab, "Module Editor")
@@ -781,6 +917,7 @@ class MainWindow(QMainWindow):
         self.moduleSelectionLayout.addWidget(self.module_search)
 
         self.module_button = QPushButton("Execute Module", self)
+        self.module_button.setCursor(Qt.PointingHandCursor)
         self.module_button.clicked.connect(self.execute_module)
         self.moduleSelectionLayout.addWidget(self.module_button)
 
@@ -792,6 +929,7 @@ class MainWindow(QMainWindow):
 
         # Refresh Button
         self.refresh_logs_button = QPushButton("Refresh Logs")
+        self.refresh_logs_button.setCursor(Qt.PointingHandCursor)
         self.refresh_logs_button.clicked.connect(self.populate_log_sessions_list)
         self.logs_layout.addWidget(self.refresh_logs_button)
 
@@ -807,11 +945,13 @@ class MainWindow(QMainWindow):
         self.populate_log_sessions_list()
 
         self.screenshot_button = QPushButton("Take Screenshot of Log")
+        self.screenshot_button.setCursor(Qt.PointingHandCursor)
         self.screenshot_button.clicked.connect(self.gather_screenshots)
         self.logs_layout.addWidget(self.screenshot_button)
 
         # Delete Logs Button
         self.delete_logs_button = QPushButton("Delete Logs")
+        self.delete_logs_button.setCursor(Qt.PointingHandCursor)
         self.delete_logs_button.setObjectName("DeleteLogsButton")
         self.delete_logs_button.clicked.connect(self.delete_logs)
         self.logs_layout.addWidget(self.delete_logs_button)
@@ -827,6 +967,66 @@ class MainWindow(QMainWindow):
 
         # hide/show tabs based on active tab
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
+
+
+    def create_report(self):
+        self.execute_script_in_tab("create_report_script.py", "Create Report")
+
+    def report_findings_execution(self):
+        # Open the dialog to get arguments
+        args_dialog = N2PArgsDialog(self)
+        if args_dialog.exec_() == QDialog.Accepted:
+            args = args_dialog.get_arguments()
+
+            # Prepare the command
+            command = ["python", "n2p_ng.py"]
+            for arg, value in args.items():
+                if arg != 'noncore' and value:
+                    command.extend([f"--{arg}", value])
+
+            # Check and append the --noncore argument separately since its the only unique one
+            if args['noncore']:
+                command.append('--noncore')
+
+            # Execute in a new tab
+            self.execute_n2p_in_tab(command, "Nessus2plextrac-ng")
+
+
+    def execute_n2p_in_tab(self, command, tab_name):
+        # Create a new tab
+        tab = QTextEdit()
+        tab.setReadOnly(True)
+        tab.is_custom_tab = True
+
+        # Execute the script
+        process = QProcess(tab)
+        process.setProcessChannelMode(QProcess.MergedChannels)
+        process.readyReadStandardOutput.connect(lambda: self.read_process_output(process, tab))
+        
+        # Separate the command into the program and arguments
+        program = command[0]
+        arguments = command[1:]
+        process.start(program, arguments)
+
+        # Add tab to the widget
+        index = self.tab_widget.addTab(tab, tab_name)
+
+        # Add close button to the tab
+        self.add_close_button_to_tab(tab, index)
+
+
+    def read_process_output(self, process, text_edit):
+        text_edit.append(process.readAllStandardOutput().data().decode())
+
+    def add_close_button_to_tab(self, tab, index):
+        close_button = QPushButton()
+        close_button.setIcon(self.style().standardIcon(QStyle.SP_DockWidgetCloseButton))
+        close_button.setStyleSheet(closeButtonStyle)
+        close_button.setFixedSize(16, 16)
+        close_button.setToolTip("Close Tab")
+        close_button.setProperty('tab_widget', tab)
+        close_button.clicked.connect(self.close_tab_from_button)
+        self.tab_widget.tabBar().setTabButton(index, QTabBar.RightSide, close_button)
 
 
     def open_file(self):
@@ -857,7 +1057,7 @@ class MainWindow(QMainWindow):
 
                 text_edit = QTextEdit()
                 text_edit.setPlainText(pretty_json)
-                text_edit.setFont(QFont("Courier", 10))  # Optional: Set a fixed-width font for better readability
+                text_edit.setFont(QFont("Courier", 10))
                 layout.addWidget(text_edit)
             elif file_name.lower().endswith('.html'):
                 # Display HTML in a QWebEngineView
@@ -869,10 +1069,10 @@ class MainWindow(QMainWindow):
             # Add close button to the tab
             close_button = QPushButton()
             close_button.setIcon(self.style().standardIcon(QStyle.SP_DockWidgetCloseButton))
-            close_button.setStyleSheet("QPushButton { border: none; }")
+            close_button.setStyleSheet(closeButtonStyle)
             close_button.setFixedSize(16, 16)
             close_button.setToolTip("Close Tab")
-            close_button.setProperty('tab_widget', tab)  # Set the property to tab
+            close_button.setProperty('tab_widget', tab)
             close_button.clicked.connect(self.close_tab_from_button)
 
             self.tab_widget.tabBar().setTabButton(self.tab_widget.indexOf(tab), QTabBar.RightSide, close_button)
@@ -905,7 +1105,7 @@ class MainWindow(QMainWindow):
             # Close and delete the temporary file
             self.temp_file.close()
             os.remove(self.temp_file.name)
-            self.temp_file = None  # Reset the temp_file attribute
+            self.temp_file = None
 
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to save module: {e}")
@@ -1457,15 +1657,28 @@ class MainWindow(QMainWindow):
                 self.moduleComboBox.addItem(filename)
         
     def on_tab_changed(self, index):
-        nmb_tab_index = 4 # assumes NMB is index 4. this will need to change if we add more tabs that overtake this slot
+        nmb_tab_index = 4 # assumes NMB is index 4. Adjust as needed for other tabs
         is_nmb_tab_selected = self.tab_widget.currentIndex() == nmb_tab_index
 
-        # Show/Hide module selection layout
-        self.module_label.setVisible(not is_nmb_tab_selected)
-        self.moduleComboBox.setVisible(not is_nmb_tab_selected)
-        self.module_search.setVisible(not is_nmb_tab_selected)
-        self.module_button.setVisible(not is_nmb_tab_selected)
-    
+        current_tab = self.tab_widget.widget(index)
+        is_custom_tab = hasattr(current_tab, 'is_custom_tab') and current_tab.is_custom_tab
+
+        # Determine visibility for module selection layout
+        should_hide_modules = is_nmb_tab_selected or is_custom_tab
+        self.module_label.setVisible(not should_hide_modules)
+        self.moduleComboBox.setVisible(not should_hide_modules)
+        self.module_search.setVisible(not should_hide_modules)
+        self.module_button.setVisible(not should_hide_modules)
+
+        # Drone selection layout visibility is not affected by NMB tab
+        # It should only be hidden when a custom tab is selected
+        should_hide_drones = is_custom_tab
+        for i in range(self.droneSelectionLayout.count()): 
+            widget = self.droneSelectionLayout.itemAt(i).widget()
+            if widget is not None:
+                widget.setVisible(not should_hide_drones)
+
+        
     def populate_drones(self):
         for drone_id in self.drones:
             self.drone_selector.addItem(drone_id)
@@ -1536,6 +1749,7 @@ class MainWindow(QMainWindow):
         index = self.tab_widget.addTab(tab, tab_name)
         # Create a close button for the tab
         close_button = QPushButton()
+        close_button.setCursor(Qt.PointingHandCursor)
         close_button.setIcon(self.style().standardIcon(QStyle.SP_DockWidgetCloseButton))  # Or use a custom icon
         close_button.setStyleSheet(closeButtonStyle)
         close_button.setFixedSize(16, 16)
