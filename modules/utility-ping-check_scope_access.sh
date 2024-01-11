@@ -1,7 +1,7 @@
 #!/bin/bash
-# ARGS
-# File "Path to targets.txt"
-# ENDARGS
+# STARTFILES
+# targets.txt "Target file description"
+# ENDFILES
 # AUTHOR: Mitchell
 
 # Description: Takes a list of subnets in a txt file, performs a ping scan against them, and identifies any subnets that are reachoable or unreachable.
