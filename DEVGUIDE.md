@@ -143,6 +143,19 @@ fi
 
 You can then interact with the UI under "terminal > connect to tmux session" then select the named session from the dropdown list.
 
+### Example Module with Nessus Mapping
+```bash
+#!/bin/bash
+# NESSUSFINDING
+# SSH Server CBC Mode Ciphers Enabled
+# ENDNESSUS
+# ARGS
+# TARGET "Target as a string"
+
+TARGET=$1
+nmap --script ssh2-enum-algos $TARGET 
+```
+
 
 ## Contributing Your Module
 
