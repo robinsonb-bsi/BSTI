@@ -3,6 +3,9 @@
 # IP "RHOSTS"
 # PORT "RPORT"
 # ENDARGS
+# NESSUSFINDING
+# SSH Server CBC Mode Ciphers Enabled
+# ENDNESSUS
 # AUTHOR: Mitchell Kerns
 
 # MSF SSH Version

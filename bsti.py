@@ -20,6 +20,7 @@ import html
 import re
 import threading
 import signal
+import hashlib
 
 # TODO 
 """
@@ -27,11 +28,11 @@ organize code :(
 Integration with n2p tabs/menu bar --> main execution is done, need to figure out report gen and plugin manager
 home page diagnostics -> move file transfer tab?
 parser for csv built-in
-metadata for modules to map to nessus findings, then convert to md5 when saving the screenshot
 setup project folder per session
 fix halo spinner on n2p and nmb
 
 # Done
+metadata for modules to map to nessus findings, then convert to md5 when saving the screenshot
 pause button for nmb
 open NMB json for editing
 render html, csv results from NMB/interpreter 
@@ -212,19 +213,33 @@ DRACULA_STYLESHEET = """
     }
 """
 
+CONFIG_DIR = ".config"
+CONFIG_FILE = os.path.join(CONFIG_DIR, "drones.json")
+
+def save_config(drones):
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    with open(CONFIG_FILE, 'w') as file:
+        json.dump(drones, file, indent=4)
+
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, 'r') as file:
+            return json.load(file)
+    return {}
 class CommandLineArgsDialog(QDialog):
-    def __init__(self, script_path, host, username, password, parent=None, ):
+    def __init__(self, script_path, host, username, password, parent=None):
         super().__init__(parent)
         self.host = host
         self.username = username
         self.password = password
+        self.nessus_finding = None
 
         self.setWindowTitle('Enter Command-Line Arguments')
 
         layout = QVBoxLayout(self)
 
-        # Parse the script for arguments and file requirements
-        self.args_metadata, self.file_metadata = self.parse_script_for_args(script_path)
+        # Parse the script for arguments, file requirements, and Nessus finding
+        self.args_metadata, self.file_metadata, self.nessus_finding = self.parse_script_for_args(script_path)
         self.arg_inputs = {}
 
         # Add argument fields
@@ -262,12 +277,12 @@ class CommandLineArgsDialog(QDialog):
         args_str = ' '.join(input.text().strip() for input in self.arg_inputs.values())
         file_paths = {arg: input.text().strip() for arg, input in self.file_inputs.items()}
 
-        return args_str, file_paths
+        return args_str, file_paths, self.nessus_finding
 
     
     def on_submit(self):
         # Retrieve the arguments and file paths as a tuple
-        args_str, file_paths = self.get_arguments()
+        args_str, file_paths, self.nessus_finding = self.get_arguments()
         success = True
 
         # Handle file uploads
@@ -320,14 +335,18 @@ class CommandLineArgsDialog(QDialog):
     def parse_script_for_args(script_path):
         args_metadata = {}
         file_metadata = {}
+        nessus_finding = None
         try:
             with open(script_path, 'r') as script_file:
-                parse_args, parse_files = False, False
+                parse_args, parse_files, parse_nessus = False, False, False
                 for line in script_file:
                     if line.startswith("#!"):
                         continue  # Skip shebang line
                     if line.strip() == '# ARGS':
                         parse_args = True
+                        continue
+                    if line.strip() == '# ENDARGS':
+                        parse_args = False
                         continue
                     if line.strip() == '# STARTFILES':
                         parse_files = True
@@ -335,8 +354,14 @@ class CommandLineArgsDialog(QDialog):
                     if line.strip() == '# ENDFILES':
                         parse_files = False
                         continue
-                    if line.strip() == '# ENDARGS':
-                        parse_args = False
+                    if line.strip() == '# NESSUSFINDING':
+                        parse_nessus = True
+                        continue
+                    if line.strip() == '# ENDNESSUS':
+                        parse_nessus = False
+                        continue
+                    if parse_nessus:
+                        nessus_finding = line.strip()
                         continue
                     if parse_args and line.startswith('#'):
                         parts = line[1:].strip().split(" ", 1)
@@ -350,25 +375,12 @@ class CommandLineArgsDialog(QDialog):
                             file_metadata[file_arg] = desc.strip('"')
         except Exception as e:
             QMessageBox.warning(None, "Error", f"Error reading script: {e}")
-        return args_metadata, file_metadata
+        return args_metadata, file_metadata, nessus_finding
+
 
     
     def has_arguments(self):
         return bool(self.args_metadata) or bool(self.file_metadata)
-
-CONFIG_DIR = ".config"
-CONFIG_FILE = os.path.join(CONFIG_DIR, "drones.json")
-
-def save_config(drones):
-    os.makedirs(CONFIG_DIR, exist_ok=True)
-    with open(CONFIG_FILE, 'w') as file:
-        json.dump(drones, file, indent=4)
-
-def load_config():
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, 'r') as file:
-            return json.load(file)
-    return {}
 
 class WaitingDialog(QDialog):
     def __init__(self, message, parent=None):
@@ -788,6 +800,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.current_module_path = None
         self.temp_file = None
+        self.nessus_finding_name = None
+        self.nessus_findings_map = {}
         self.setWindowTitle("Bulletproof Solutions Testing Interface")
         self.setGeometry(100, 100, 800, 600)
         self.threads = []
@@ -945,6 +959,9 @@ class MainWindow(QMainWindow):
 
         self.layout.addLayout(self.moduleSelectionLayout)
 
+        # Add NMB tab
+        self.setup_nmb_tab()
+
         # View Logs Tab
         self.logs_tab = QWidget()
         self.logs_layout = QVBoxLayout(self.logs_tab)
@@ -983,9 +1000,6 @@ class MainWindow(QMainWindow):
         self.home_layout = QGridLayout(self.home_tab)
         self.add_home_cards()
         self.tab_widget.insertTab(0, self.home_tab, "Home")
-
-        # Add NMB tab
-        self.setup_nmb_tab()
 
         # hide/show tabs based on active tab
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
@@ -1757,7 +1771,7 @@ class MainWindow(QMainWindow):
                 self.moduleComboBox.addItem(filename)
         
     def on_tab_changed(self, index):
-        nmb_tab_index = 4 # assumes NMB is index 4. Adjust as needed for other tabs
+        nmb_tab_index = 3 # assumes NMB is index 4. Adjust as needed for other tabs
         is_nmb_tab_selected = self.tab_widget.currentIndex() == nmb_tab_index
 
         current_tab = self.tab_widget.widget(index)
@@ -1825,7 +1839,7 @@ class MainWindow(QMainWindow):
             index = self.tab_widget.indexOf(tab)
             self.close_tab(index)
 
-    def add_ssh_tab(self, host, username, password, command, is_script_path=True, group_name="", group_color=None):
+    def add_ssh_tab(self, host, username, password, command, is_script_path=True, nessus_finding_name=None, group_name="", group_color=None):        
         tab = QTextEdit()
         tab.setReadOnly(True)
         if group_color:
@@ -1835,6 +1849,11 @@ class MainWindow(QMainWindow):
 
         # Prepare for logging
         session_id = f"{username}@{host}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    
+        # Store the Nessus finding name associated with this session ID
+        if nessus_finding_name:
+            self.nessus_findings_map[session_id] = nessus_finding_name
+
         log_dir = os.path.join("logs", session_id)
         os.makedirs(log_dir, exist_ok=True)
         log_file_path = os.path.join(log_dir, "BSTI.log")
@@ -1926,15 +1945,18 @@ class MainWindow(QMainWindow):
                         self.open_tab_group(tab_info["command"], False, group_name, group_color)
             return
 
-        elif selected_module.endswith(('.py', '.sh')):
+        if selected_module.endswith(('.py', '.sh')):
             args_dialog = CommandLineArgsDialog(module_path, host, username, password, self)
-            args = ""
-            file_paths = {}
+            nessus_finding_name = None
             if args_dialog.has_arguments():
                 if args_dialog.exec_() == QDialog.Accepted:
-                    args, file_paths = args_dialog.get_arguments()
+                    args, file_paths, nessus_finding_name = args_dialog.get_arguments()
+                    if nessus_finding_name:
+                        nessus_finding_name = nessus_finding_name.strip('# ').lower()
+
             full_command = (f"{module_path} {args}", file_paths)
-            self.add_ssh_tab(host, username, password, full_command, is_script_path=True)
+            self.add_ssh_tab(host, username, password, full_command, is_script_path=True, nessus_finding_name=nessus_finding_name)
+
 
     def open_tab_group(self, command, is_script_path=True, group_name=None, group_color=None):
         drone_id = self.drone_selector.currentText()
@@ -1949,7 +1971,7 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
 
-    def gather_screenshots(self):
+    def gather_screenshots(self, nessus_finding_name=None):
         def strip_ansi_codes(text):
             ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
             return ansi_escape.sub('', text)
@@ -1960,7 +1982,6 @@ class MainWindow(QMainWindow):
 
         output = self.log_content_area.toPlainText()
         try:
-            #module_comment = f"# Module executed: {self.current_module}" if hasattr(self, 'current_module') else ""
         
             cleaned_output = html.escape(consolidate_linebreaks(strip_ansi_codes(output)))
 
@@ -1981,7 +2002,6 @@ class MainWindow(QMainWindow):
                 word-wrap: break-word;       /* Break the word at the edge */
             }
 
-            /* Optional: Add a background texture for a more nuanced look */
             body::after {
                 content: '';
                 position: absolute;
@@ -2021,15 +2041,23 @@ class MainWindow(QMainWindow):
 
             screenshot_dir = "screenshots"
 
-            os.makedirs(screenshot_dir, exist_ok=True)  # Ensure the directory exists
+            os.makedirs(screenshot_dir, exist_ok=True)
 
-            # Specify the output file path based on the session name
             session_name = self.log_sessions_combo.currentText()
-            output_path = os.path.join(screenshot_dir, f"{session_name}.png")
+            nessus_finding_name = self.nessus_findings_map.get(session_name)
+
+            if nessus_finding_name:
+                filename = hashlib.md5(nessus_finding_name.encode()).hexdigest() + ".png"
+            else:
+                # Default filename logic
+                filename = f"{session_name}.png"
+
+            output_path = os.path.join("screenshots", filename)
 
             # Save the screenshot
             shot.create_pic(html=html_content, css=css, output=output_path)
             QMessageBox.information(self, "Screenshot Saved", f"Screenshot saved as {output_path}")
+            self.nessus_findings_map.pop(session_name, None)
         
         except Exception:
             QMessageBox.information(self, "Error", "Unable to capture screenshot")
