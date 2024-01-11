@@ -18,17 +18,21 @@ import subprocess
 from htmlwebshot import WebShot, Config
 import html
 import re
+import threading
+import signal
 
 # TODO 
 """
 organize code :(
 Integration with n2p tabs/menu bar --> main execution is done, need to figure out report gen and plugin manager
-home page diagnostics
+home page diagnostics -> move file transfer tab?
 parser for csv built-in
 metadata for modules to map to nessus findings, then convert to md5 when saving the screenshot
 setup project folder per session
+fix halo spinner on n2p and nmb
 
 # Done
+pause button for nmb
 open NMB json for editing
 render html, csv results from NMB/interpreter 
 temp file creating when module is edited, that is executed for temp changes
@@ -628,15 +632,33 @@ class NMBRunnerThread(QThread):
     def __init__(self, command):
         super().__init__()
         self.command = command
+        self.process = None
+        self._pause_requested = threading.Event()
 
     def run(self):
-        process = subprocess.Popen(self.command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        if sys.platform == 'win32':
+            self.process = subprocess.Popen(self.command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+        else:
+            self.process = subprocess.Popen(self.command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
         while True:
-            output = process.stdout.readline()
-            if output == '' and process.poll() is not None:
+            if self._pause_requested.is_set():
+                self.pause_process()
+                break
+            output = self.process.stdout.readline()
+            if output == '' and self.process.poll() is not None:
                 break
             if output:
                 self.output_signal.emit(output.strip())
+
+    def pause(self):
+        self._pause_requested.set()
+
+    def pause_process(self):
+        if sys.platform == 'win32':
+            self.process.send_signal(signal.CTRL_BREAK_EVENT)
+        else:
+            self.process.send_signal(signal.SIGINT)
 
 class N2PArgsDialog(QDialog):
     def __init__(self, parent=None):
@@ -1166,11 +1188,21 @@ class MainWindow(QMainWindow):
 
         self.argument_layout = QFormLayout() 
         self.nmb_layout.addLayout(self.argument_layout) 
-        # Execute button
-        self.execute_nmb_button = QPushButton("Execute NMB")
+
+        self.buttons_layout = QHBoxLayout()
+        # Run button
+        self.execute_nmb_button = QPushButton("Run")
         self.execute_nmb_button.setObjectName("ExecuteNMBButton")
         self.execute_nmb_button.clicked.connect(self.execute_nmb)
-        self.nmb_layout.addWidget(self.execute_nmb_button)
+        self.buttons_layout.addWidget(self.execute_nmb_button)
+
+        # Pause button
+        self.pause_button = QPushButton("Pause", self)
+        self.pause_button.clicked.connect(self.on_pause_clicked)
+        self.buttons_layout.addWidget(self.pause_button)
+
+        # Add the buttons layout to the main layout
+        self.nmb_layout.addLayout(self.buttons_layout)
 
         # Output area
         self.nmb_output = QTextEdit()
@@ -1180,6 +1212,20 @@ class MainWindow(QMainWindow):
         # Add NMB tab to the main tab widget
         self.tab_widget.addTab(self.nmb_tab, "NMB")
         self.update_argument_fields()
+
+    def add_controls(self):
+        self.pause_button = QPushButton("Pause", self)
+        self.pause_button.clicked.connect(self.on_pause_clicked)
+
+    def on_pause_clicked(self):
+        try:
+            if self.nmb_thread:
+                self.nmb_thread.pause()
+        except AttributeError:
+            QMessageBox.warning(self, "Error", "NMB is not running")
+        else:
+            QMessageBox.information(self, "State Saved", "The save state signal has been sent.")
+
 
     def initialize_mode_arguments(self):
         self.mode_arguments = {

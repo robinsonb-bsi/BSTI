@@ -11,7 +11,6 @@ from scripts.creator import GenConfig
 from mobsf.mobsf import Mobber
 from scripts.lackey import Lackey
 from burp.burp import Burper
-from glob import glob
 from dotenv import load_dotenv
 from immuniweb.immuni import Immuniweb
 from scripts.logging_config import log
@@ -329,4 +328,5 @@ def parse_arguments():
 
     
 if __name__ == '__main__':
+    log.info("---------------Welcome to NMB----------------")
     main()

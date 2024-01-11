@@ -18,7 +18,7 @@ from scripts.nmap_scripts import nmap_script_data
 from scripts.interpreter import Interpreter
 from scripts.analyzer import Analyzer
 import shutil
-
+import signal
 
 class Lackey:
     def __init__(self, csv_file, ext_scope, local_checks, username, password, drone, educated_guess, run_eyewitness=False):
@@ -41,6 +41,9 @@ class Lackey:
         self.state_pattern = re.compile(r"\d+\/\w+\s+(open|closed|filtered)\s+\w+")
         exec = ConfigParser(csv_file)
         self.nessus_data, self.json_config, self.supported_plugins, self.missing_plugins = exec.gather_data()
+        self.current_host_index = 0
+        self.current_csv_file_hash = self.compute_file_hash(self.csv_file)
+        self.setup_signal_handlers()
         self.engine()
         self.generate_summary()
         self.gather_screenshots()
@@ -256,58 +259,6 @@ class Lackey:
             
             return educated_output
 
-    def compute_file_hash(self, filename):
-        """Compute a SHA256 hash of a file."""
-        with open(filename, 'rb') as f:
-            file_data = f.read()
-        return hashlib.sha256(file_data).hexdigest()
-
-
-    def get_state_filename(self):
-        """Generate a state filename based on the hash of the csv_file."""
-        hash_value = self.compute_file_hash(self.csv_file)[:10]  # Take the first 10 chars for brevity
-        filename = f'state_{hash_value}.pkl'
-        return 'local_' + filename if self.local_checks else filename
-
-    def save_state(self, state):
-        """Save the current state with file locking to avoid race conditions."""
-        state_file = self.get_state_filename()
-        lock = FileLock(f"{state_file}.lock")
-        with lock:
-            with open(state_file, 'wb') as f:
-                pickle.dump(state, f)
-        return state_file
-
-    def load_state(self):
-        """Load the saved state with file locking."""
-        state_file = self.get_state_filename()
-        lock = FileLock(f"{state_file}.lock")
-        with lock:
-            if os.path.exists(state_file):
-                try:
-                    with open(state_file, 'rb') as f:
-                        state = pickle.load(f)
-                    return state
-                except FileNotFoundError:
-                    return None
-            else:
-                return None
-
-
-    def load_initial_state(self):
-        saved_state_data = self.load_state()
-        current_csv_file_hash = self.compute_file_hash(self.csv_file)
-        current_host_index = 0
-
-        if saved_state_data:
-            log.success("Previous state loaded.")
-            saved_csv_file_hash = saved_state_data.get('csv_file_hash')
-            if saved_csv_file_hash != current_csv_file_hash:
-                log.warning("CSV file has changed since the last run. Starting from the beginning.")
-            else:
-                current_host_index = saved_state_data.get('current_host_index', 0)
-
-        return current_host_index, current_csv_file_hash
     
     def process_educated_guess(self):
         if not self.enable_educated_guess:
@@ -451,23 +402,8 @@ class Lackey:
             log.warning(f"Status unknown for {name}")
 
     def engine(self):
-        """
-        Execute the scanning engine.
-
-        The function performs scans based on the provided Nessus data and the JSON configuration.
-        It iterates over each item in the Nessus data and extracts the necessary information.
-        For each item, it searches for the corresponding category in the JSON configuration using the plugin ID.
-        If a match is found, it retrieves the scan type and parameters from the category data.
-        It checks if the plugin ID has already been verified, and if so, skips the current item.
-        It prints a message indicating the testing of the host and plugin.
-        It runs the scan using the `run_scan` method and checks the scan output using the `check_scan` method.
-        Based on the result, it takes appropriate actions, such as rerunning the scan with modified parameters or updating the verified findings.
-        It updates the sets and lists to track verified findings, failed checks, and unknown checks.
-        It logs the status and results of each check.
-        The function serves as the main engine for the scanning process.
-        """
         try:
-            current_host_index, current_csv_file_hash = self.load_initial_state()
+            self.current_host_index, _ = self.load_initial_state()
             self.process_educated_guess()
 
             plugin_to_category = {
@@ -477,10 +413,10 @@ class Lackey:
             }
 
             verified_findings, failed_hosts, retried_scans = set(), set(), set()
-            for index, item in enumerate(self.nessus_data[current_host_index:]):
+            for index, item in enumerate(self.nessus_data[self.current_host_index:]):
                 # Pass retried_scans to process_item
                 self.process_item(item, plugin_to_category, verified_findings, failed_hosts, retried_scans)
-                current_host_index = index + 1
+                self.current_host_index = index + 1
 
             saved_state = self.get_state_filename()
             if os.path.exists(saved_state):
@@ -488,14 +424,78 @@ class Lackey:
                 log.warning("State file removed.")
 
         except Exception as e: 
-            log.error(e)# Catch all exceptions to ensure the state is saved before exiting
-            self.save_state_and_exit(current_host_index, current_csv_file_hash)
+            log.error(e) # Catch all exceptions to ensure the state is saved before exiting
+            self.save_state_and_exit()
 
-    def save_state_and_exit(self, current_host_index, current_csv_file_hash):
-        log.warning("An error occurred - Saving current state...")
+    def compute_file_hash(self, filename):
+        """Compute a SHA256 hash of a file."""
+        with open(filename, 'rb') as f:
+            file_data = f.read()
+        return hashlib.sha256(file_data).hexdigest()
+
+
+    def get_state_filename(self):
+        """Generate a state filename based on the hash of the csv_file."""
+        hash_value = self.compute_file_hash(self.csv_file)[:10]  # Take the first 10 chars for brevity
+        filename = f'state_{hash_value}.pkl'
+        return 'local_' + filename if self.local_checks else filename
+
+    def save_state(self, state):
+        """Save the current state with file locking to avoid race conditions."""
+        state_file = self.get_state_filename()
+        lock = FileLock(f"{state_file}.lock")
+        with lock:
+            with open(state_file, 'wb') as f:
+                pickle.dump(state, f)
+        return state_file
+
+    def load_state(self):
+        """Load the saved state with file locking."""
+        state_file = self.get_state_filename()
+        lock = FileLock(f"{state_file}.lock")
+        with lock:
+            if os.path.exists(state_file):
+                try:
+                    with open(state_file, 'rb') as f:
+                        state = pickle.load(f)
+                    return state
+                except FileNotFoundError:
+                    return None
+            else:
+                return None
+
+    def setup_signal_handlers(self):
+        if sys.platform == 'win32':
+            signal.signal(signal.SIGBREAK, self.signal_handler)
+        else:
+            signal.signal(signal.SIGINT, self.signal_handler)
+
+    def signal_handler(self, signum, frame):
+        log.warning(f"Received signal: {signum}. Saving state and exiting...")
+        self.save_state_and_exit()
+
+    def load_initial_state(self):
+        saved_state_data = self.load_state()
+        current_csv_file_hash = self.compute_file_hash(self.csv_file)
+        self.current_host_index = 0
+
+        if saved_state_data:
+            log.success("Previous state loaded.")
+            saved_csv_file_hash = saved_state_data.get('csv_file_hash')
+            if saved_csv_file_hash != current_csv_file_hash:
+                log.warning("CSV file has changed since the last run. Starting from the beginning.")
+            else:
+                self.current_host_index = saved_state_data.get('current_host_index', 0)
+                self.verified_checks = saved_state_data.get('verified_checks', [])  # Load verified checks
+
+        return self.current_host_index, current_csv_file_hash
+
+    def save_state_and_exit(self):
+        log.warning("Saving current state...")
         state = {
-            'current_host_index': current_host_index,
-            'csv_file_hash': current_csv_file_hash
+            'current_host_index': self.current_host_index,
+            'csv_file_hash': self.current_csv_file_hash,
+            'verified_checks': self.verified_checks 
         }
         self.save_state(state)
         log.success("Current state saved. Exiting gracefully.")

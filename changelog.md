@@ -19,3 +19,4 @@
 - tempfile used as execution script if edits are made, saving makes it permanent 
 - n2p somewhat viable - no reportgen yet
 - view nmb logs in the UI now
+- pause button for nmb
