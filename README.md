@@ -1,13 +1,13 @@
 <div align="center">
-<h1 align="center">
-<img src="(https://github.com/fancyc-bsi/BSTI/assets/bsti.png)
-" width="100" /> 
-<br>
-Bulletproof Solutions Testing Interface
+  <h1 align="center">
+    <img src="https://github.com/fancyc-bsi/BSTI/blob/main/assets/bsti.png?raw=true" width="300" />
+    <br>
+  </h1>
+</div>
 </h1>
 
 <p align="center">
-<img src="https://img.shields.io/badge/Python-3776AB.svg?style&logo=Python&logoColor=white" alt="Python" />
+Bulletproof Solutions Testing Interface
 </p>
 </div>
 
