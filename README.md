@@ -8,7 +8,6 @@
 
 <p align="center">
 Bulletproof Solutions Testing Interface
-<img src="https://img.shields.io/badge/Python-3776AB.svg?style&logo=Python&logoColor=white" alt="Python" />
 </p>
 </div>
 
