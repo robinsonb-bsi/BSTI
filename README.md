@@ -50,7 +50,7 @@ Bulletproof Solutions Testing Interface
 
 ### ✔️ Prerequisites
 
-Python3 installed.
+**Very important that Python3.9 is installed.**
 
 To take screenshots, wkhtmltopdf is required:
 
@@ -74,6 +74,9 @@ Install the required Python packages:
 
 pip install -r requirements.txt
 
+# For NMB + Reporting functionality
+pip install -r nmb_n2p_requirements.txt
+
 ```
 ---
 ## 🎮 Using BSTI
@@ -85,6 +88,8 @@ python bsti.py
 ### Connecting
 To connect to a BSTG, click "Config" in the top-left corner, then "Configure new BSTG" and enter the login details.  
 If you've already connected to that BSTG with BSTI before, it'll show up in the bottom left corner. You can change this on the fly by clicking in that space and selecting another BSTG from the dropdown menu.
+
+It is highly recommended to add your public ssh key to the drone to prevent the need for password authentication. This can be done from the UI here:
 
 ### Home Tab
 

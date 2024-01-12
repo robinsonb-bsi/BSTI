@@ -1095,13 +1095,15 @@ class MainWindow(QMainWindow):
             command = f"python n2p_ng.py -u {username} -p '{password}' -t report --create"
             try:
                 if sys.platform == "win32":
-                    # For Windows
-                    subprocess.Popen(f'start powershell {command}', shell=True)
+                    # For Windows, modify the command to keep PowerShell open
+                    powershell_command = f'start powershell -Command "{command}; Read-Host -Prompt \'MAKE SURE YOU COPY THE REPORT AND CLIENT ID - Press Enter to exit\'"'
+                    subprocess.Popen(powershell_command, shell=True)
                 else:
                     # For Unix/Linux
                     subprocess.Popen(['gnome-terminal', '--', 'bash', '-c', command])
             except Exception as e:
                 QMessageBox.warning(self, "Error", f"Failed to execute the command: {e}")
+
 
     def run_plugin_manager(self):
         csv_file, _ = QFileDialog.getOpenFileName(self, "Select CSV File", "", "CSV Files (*.csv)")
