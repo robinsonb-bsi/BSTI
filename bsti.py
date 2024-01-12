@@ -5,7 +5,7 @@
 import sys
 import os
 import pandas as pd
-from PyQt5.QtWidgets import (QApplication, QDialogButtonBox, QTableWidget, QTableWidgetItem, QCheckBox, QLabel, QAction, QTabBar, QStyle, QPlainTextEdit, QMainWindow, QGridLayout, QHBoxLayout, QTabWidget, QTextEdit, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QDialog, QLineEdit, QFormLayout, QMessageBox, QComboBox)
+from PyQt5.QtWidgets import (QApplication, QInputDialog, QDialogButtonBox, QTableWidget, QTableWidgetItem, QCheckBox, QLabel, QAction, QTabBar, QStyle, QPlainTextEdit, QMainWindow, QGridLayout, QHBoxLayout, QTabWidget, QTextEdit, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QDialog, QLineEdit, QFormLayout, QMessageBox, QComboBox)
 from PyQt5.QtCore import QThread, pyqtSignal, QUrl, QRegExp, Qt, QProcess
 from PyQt5.QtGui import QTextCursor, QFont, QSyntaxHighlighter, QTextCharFormat, QColor, QDesktopServices
 from PyQt5.QtWebKitWidgets import QWebView
@@ -21,6 +21,10 @@ import re
 import threading
 import signal
 import hashlib
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning, 
+                        message=".*sipPyTypeDict.*") # hushes annoying errors for now temp solution
+
 
 # TODO 
 """
@@ -52,6 +56,28 @@ allow for arguments in modules
 parse arguments and prompt user based on how many
 create module file
 terminal rework
+"""
+
+STYLESHEET_FOR_TEXTEDIT = """
+    QTextEdit {
+        font-family: 'Consolas', 'Courier New', monospace;
+        font-size: 12pt;
+        color: #f8f8f2;
+        background-color: #44475a;
+        padding: 5px;
+        border: 1px solid #6272a4;
+    }
+"""
+
+LABEL_STYLESHEET = """
+    QLabel {
+        font-family: 'Arial';
+        font-size: 14pt;
+        color: #f8f8f2;
+        background-color: #44475a;
+        padding: 5px;
+        border: 1px solid #6272a4;
+    }
 """
 
 closeButtonStyle = """
@@ -226,6 +252,44 @@ def load_config():
         with open(CONFIG_FILE, 'r') as file:
             return json.load(file)
     return {}
+
+class DiagnosticThread(QThread):
+    diagnosticsUpdated = pyqtSignal(str, str)
+
+    def __init__(self, host, username, password):
+        super().__init__()
+        self.host = host
+        self.username = username
+        self.password = password
+        self.ssh_client = paramiko.SSHClient()
+        self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+    def run(self):
+        try:
+            self.ssh_client.connect(self.host, username=self.username, password=self.password)
+            while True:
+                stdin, stdout, stderr = self.ssh_client.exec_command("top -b -n 1")
+                top_output = stdout.read().decode('utf-8')
+
+                response = subprocess.Popen(["ping", self.host], stdout=subprocess.PIPE)
+                ping_output, _ = response.communicate()
+
+                self.diagnosticsUpdated.emit(top_output, ping_output.decode('utf-8'))
+
+                self.sleep(1)
+
+        except Exception as e:
+            self.diagnosticsUpdated.emit("Connection Error", "Offline")
+
+        finally:
+            if self.ssh_client:
+                self.ssh_client.close()
+
+    def stop(self):
+        self.terminate()
+        if self.ssh_client:
+            self.ssh_client.close()
+
 class CommandLineArgsDialog(QDialog):
     def __init__(self, script_path, host, username, password, parent=None):
         super().__init__(parent)
@@ -795,6 +859,28 @@ class N2PArgsDialog(QDialog):
             'noncore': self.non_core_check.isChecked(),
         }
 
+class CredentialsDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.setWindowTitle("Enter Credentials")
+
+        layout = QFormLayout(self)
+        self.usernameLineEdit = QLineEdit(self)
+        self.passwordLineEdit = QLineEdit(self)
+        self.passwordLineEdit.setEchoMode(QLineEdit.Password)
+
+        layout.addRow("Username:", self.usernameLineEdit)
+        layout.addRow("Password:", self.passwordLineEdit)
+
+        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        layout.addRow(self.buttons)
+
+    def getCredentials(self):
+        return self.usernameLineEdit.text(), self.passwordLineEdit.text()
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -891,51 +977,6 @@ class MainWindow(QMainWindow):
         self.module_editor_layout.addWidget(self.save_button)
         self.tab_widget.addTab(self.module_editor_tab, "Module Editor")
 
-        # File Transfer Tab
-        self.file_transfer_tab = QWidget()
-        self.file_transfer_layout = QVBoxLayout(self.file_transfer_tab)
-
-        # Upload section
-        self.upload_layout = QHBoxLayout()
-        self.upload_file_label = QLabel("Upload File:")
-        self.upload_file_path = QLineEdit()
-        self.browse_button = QPushButton("Browse")
-        self.browse_button.clicked.connect(self.browse_file)
-        self.upload_to_label = QLabel("To:")
-        self.upload_remote_path = QLineEdit("/path/on/drone")
-        self.upload_button = QPushButton("Upload")
-        self.upload_button.clicked.connect(self.upload_file)
-        self.upload_layout.addWidget(self.upload_file_label)
-        self.upload_layout.addWidget(self.upload_file_path)
-        self.upload_layout.addWidget(self.browse_button)
-        self.upload_layout.addWidget(self.upload_to_label)
-        self.upload_layout.addWidget(self.upload_remote_path)
-        self.upload_layout.addWidget(self.upload_button)
-
-        self.file_transfer_layout.addLayout(self.upload_layout)
-
-        # Download section
-        self.download_layout = QHBoxLayout()
-        self.download_file_label = QLabel("Download File:")
-        self.download_file_path = QLineEdit("/path/on/drone")
-        self.download_to_label = QLabel("To:")
-        self.download_local_path = QLineEdit()
-        self.download_browse_button = QPushButton("Browse")
-        self.download_browse_button.clicked.connect(self.browse_save_location)
-        self.download_button = QPushButton("Download")
-        self.download_button.clicked.connect(self.download_file)
-        self.download_layout.addWidget(self.download_file_label)
-        self.download_layout.addWidget(self.download_file_path)
-        self.download_layout.addWidget(self.download_to_label)
-        self.download_layout.addWidget(self.download_local_path)
-        self.download_layout.addWidget(self.download_browse_button)
-        self.download_layout.addWidget(self.download_button)
-
-        self.file_transfer_layout.addLayout(self.download_layout)
-
-        # Add the file transfer tab to the tab widget
-        self.tab_widget.addTab(self.file_transfer_tab, "File Transfer")
-
         # Module selection layout
         self.moduleSelectionLayout = QHBoxLayout()
         self.module_label = QLabel("Choose a module to run:")
@@ -996,9 +1037,15 @@ class MainWindow(QMainWindow):
         self.logs_layout.addWidget(self.delete_logs_button)
 
         # Home tab
+        self.drone_selector.currentIndexChanged.connect(self.on_drone_selected)
         self.home_tab = QWidget()
         self.home_layout = QGridLayout(self.home_tab)
+
+        # Initialize the UI components in the correct order
+        self.init_diagnostics_ui()
+        self.init_file_transfer_ui()
         self.add_home_cards()
+
         self.tab_widget.insertTab(0, self.home_tab, "Home")
 
         # hide/show tabs based on active tab
@@ -1006,8 +1053,23 @@ class MainWindow(QMainWindow):
 
 
     def create_report(self):
-        # not added yet
-        pass
+        # Open the custom dialog
+        dialog = CredentialsDialog(self)
+        if dialog.exec() == QDialog.Accepted:
+            username, password = dialog.getCredentials()
+
+            # Build and execute the command
+            command = f"python n2p_ng.py -u {username} -p '{password}' -t report --create"
+            try:
+                if sys.platform == "win32":
+                    # For Windows
+                    subprocess.Popen(f'start powershell {command}', shell=True)
+                else:
+                    # For Unix/Linux
+                    subprocess.Popen(['gnome-terminal', '--', 'bash', '-c', command])
+            except Exception as e:
+                QMessageBox.warning(self, "Error", f"Failed to execute the command: {e}")
+
 
     def report_findings_execution(self):
         # Open the dialog to get arguments
@@ -1726,18 +1788,128 @@ class MainWindow(QMainWindow):
             if filename.endswith(('.sh', '.py', '.json')) and text.lower() in filename.lower():
                 self.moduleComboBox.addItem(filename)
         
+    def on_drone_selected(self):
+        if self.diagnostics_thread and self.diagnostics_thread.isRunning():
+            self.diagnostics_thread.stop()
+
+        host, username, password = self.get_current_drone_connection()
+        if host:
+            self.diagnostics_thread = DiagnosticThread(host, username, password)
+            self.diagnostics_thread.diagnosticsUpdated.connect(self.update_diagnostics)
+            self.diagnostics_thread.start()
+        else:
+            self.top_output_display.clear()
+            self.ping_output_display.clear()
+
+    def init_diagnostics_ui(self):
+        # Create a container for diagnostics
+        self.diagnostics_container = QWidget()
+        self.diagnostics_layout = QVBoxLayout(self.diagnostics_container)
+
+
+        # System Status Display
+        self.top_output_display = QTextEdit()
+        self.top_output_display.setReadOnly(True)
+        self.top_output_display.setStyleSheet(STYLESHEET_FOR_TEXTEDIT)
+
+        # Network Status Label
+        self.online_status_label = QLabel("Checking status...")
+        self.online_status_label.setStyleSheet(LABEL_STYLESHEET)
+
+        # Add widgets to diagnostics layout
+        self.diagnostics_layout.addWidget(self.top_output_display)
+        self.diagnostics_layout.addWidget(self.online_status_label)
+
+        # Add the diagnostics container to the main layout
+        self.home_layout.addWidget(self.diagnostics_container, 1, 0, 1, 2)
+
+
+        host, username, password = self.get_current_drone_connection()
+        self.diagnostics_thread = DiagnosticThread(host, username, password)
+        self.diagnostics_thread.diagnosticsUpdated.connect(self.update_diagnostics)
+        self.diagnostics_thread.start()
+        self.home_layout.addWidget(self.diagnostics_container, 1, 0)
+
+    def init_file_transfer_ui(self):
+        # File Transfer setup
+        self.file_transfer_container = QWidget()
+        self.file_transfer_layout = QVBoxLayout(self.file_transfer_container)
+
+        self.upload_layout = QHBoxLayout()
+        self.upload_file_label = QLabel("Upload File:")
+        self.upload_file_path = QLineEdit()
+        self.browse_button = QPushButton("Browse")
+        self.browse_button.clicked.connect(self.browse_file)
+        self.upload_to_label = QLabel("To:")
+        self.upload_remote_path = QLineEdit("/path/on/drone")
+        self.upload_button = QPushButton("Upload")
+        self.upload_button.clicked.connect(self.upload_file)
+        self.upload_layout.addWidget(self.upload_file_label)
+        self.upload_layout.addWidget(self.upload_file_path)
+        self.upload_layout.addWidget(self.browse_button)
+        self.upload_layout.addWidget(self.upload_to_label)
+        self.upload_layout.addWidget(self.upload_remote_path)
+        self.upload_layout.addWidget(self.upload_button)
+
+        self.file_transfer_layout.addLayout(self.upload_layout)
+
+        # Download section
+        self.download_layout = QHBoxLayout()
+        self.download_file_label = QLabel("Download File:")
+        self.download_file_path = QLineEdit("/path/on/drone")
+        self.download_to_label = QLabel("To:")
+        self.download_local_path = QLineEdit()
+        self.download_browse_button = QPushButton("Browse")
+        self.download_browse_button.clicked.connect(self.browse_save_location)
+        self.download_button = QPushButton("Download")
+        self.download_button.clicked.connect(self.download_file)
+        self.download_layout.addWidget(self.download_file_label)
+        self.download_layout.addWidget(self.download_file_path)
+        self.download_layout.addWidget(self.download_to_label)
+        self.download_layout.addWidget(self.download_local_path)
+        self.download_layout.addWidget(self.download_browse_button)
+        self.download_layout.addWidget(self.download_button)
+
+        self.file_transfer_layout.addLayout(self.download_layout)
+
+
+        self.home_layout.addWidget(self.file_transfer_container, 1, 1)
+
+    def update_diagnostics(self, top_output, ping_output):
+        if top_output == "Connection Error":
+            error_html = "<h3 style='color: #ff5555;'>System Status:</h3><pre>Connection Error: Unable to fetch system status.</pre>"
+            self.top_output_display.setHtml(error_html)
+            self.online_status_label.setText("<h3 style='color: #ff5555;'>BSTG Connection Status:</h3><p>Offline</p>")
+        else:
+            top_output_html = f"<h3 style='color: #8be9fd;'>System Status:</h3><pre>{top_output}</pre>"
+            self.top_output_display.setHtml(top_output_html)
+
+            online_status = "Online" if "time=" in ping_output else "Offline"
+            online_status_html = f"<h3 style='color: #8be9fd;'>BSTG Connection Status:</h3><p>{online_status}</p>"
+            self.online_status_label.setText(online_status_html)
+
+
     def add_home_cards(self):
+        # Add cards for quick actions or information
+        self.card_container = QWidget()
+        self.card_layout = QGridLayout(self.card_container)
+
         card1 = QPushButton("BSTG Nessus")
         card1.setObjectName("CardButton")
         card1.setCursor(Qt.PointingHandCursor)
         card1.clicked.connect(self.open_current_drone_nessus)
-        self.home_layout.addWidget(card1, 0, 0)
 
         card2 = QPushButton("Plextrac")
         card2.setObjectName("CardButton")
-        card2.setCursor(Qt.PointingHandCursor)  
+        card2.setCursor(Qt.PointingHandCursor)
         card2.clicked.connect(lambda: self.on_card_click("https://report.kevlar.bulletproofsi.net/login"))
-        self.home_layout.addWidget(card2, 0, 1)
+
+        # Add cards to the layout
+        self.card_layout.addWidget(card1, 0, 0)
+        self.card_layout.addWidget(card2, 0, 1)
+
+        # Add the card container to the main layout
+        self.home_layout.addWidget(self.card_container, 0, 0, 1, 2)
 
     def on_card_click(self, url):
         QDesktopServices.openUrl(QUrl(url))
@@ -1771,7 +1943,7 @@ class MainWindow(QMainWindow):
                 self.moduleComboBox.addItem(filename)
         
     def on_tab_changed(self, index):
-        nmb_tab_index = 3 # assumes NMB is index 4. Adjust as needed for other tabs
+        nmb_tab_index = 2 # assumes NMB is index 2. Adjust as needed for other tabs
         is_nmb_tab_selected = self.tab_widget.currentIndex() == nmb_tab_index
 
         current_tab = self.tab_widget.widget(index)
@@ -1916,47 +2088,49 @@ class MainWindow(QMainWindow):
             return False
 
     def execute_module(self):
-        if not self.drone_selector.currentText():
-            QMessageBox.warning(self, "No Drone Selected", "Please configure and select a drone first.")
-            return
+        try:
+            if not self.drone_selector.currentText():
+                QMessageBox.warning(self, "No Drone Selected", "Please configure and select a drone first.")
+                return
 
-        selected_module = self.moduleComboBox.currentText()
-        if not selected_module:
-            QMessageBox.warning(self, "No Module Selected", "Please select a module first.")
-            return
-        self.current_module = selected_module
+            selected_module = self.moduleComboBox.currentText()
+            if not selected_module:
+                QMessageBox.warning(self, "No Module Selected", "Please select a module first.")
+                return
+            self.current_module = selected_module
 
-        # Use temporary file if available, otherwise use the original file
-        module_path = self.temp_file.name if self.temp_file else os.path.join("modules", selected_module)
+            # Use temporary file if available, otherwise use the original file
+            module_path = self.temp_file.name if self.temp_file else os.path.join("modules", selected_module)
 
-        drone_id = self.drone_selector.currentText()
-        host, username, password = self.drones[drone_id]
+            drone_id = self.drone_selector.currentText()
+            host, username, password = self.drones[drone_id]
 
-        if not self.test_drone_connection(host, username, password):
-            return
+            if not self.test_drone_connection(host, username, password):
+                return
 
-        if selected_module.endswith('.json'):
-            with open(module_path, 'r') as file:
-                module_data = json.load(file)
-                group_color = module_data.get("color", None)
-                if module_data.get("grouped", False):
-                    for tab_info in module_data.get("tabs", []):
-                        group_name = tab_info.get("name", "")
-                        self.open_tab_group(tab_info["command"], False, group_name, group_color)
-            return
+            if selected_module.endswith('.json'):
+                with open(module_path, 'r') as file:
+                    module_data = json.load(file)
+                    group_color = module_data.get("color", None)
+                    if module_data.get("grouped", False):
+                        for tab_info in module_data.get("tabs", []):
+                            group_name = tab_info.get("name", "")
+                            self.open_tab_group(tab_info["command"], False, group_name, group_color)
+                return
 
-        if selected_module.endswith(('.py', '.sh')):
-            args_dialog = CommandLineArgsDialog(module_path, host, username, password, self)
-            nessus_finding_name = None
-            if args_dialog.has_arguments():
-                if args_dialog.exec_() == QDialog.Accepted:
-                    args, file_paths, nessus_finding_name = args_dialog.get_arguments()
-                    if nessus_finding_name:
-                        nessus_finding_name = nessus_finding_name.strip('# ').lower()
+            if selected_module.endswith(('.py', '.sh')):
+                args_dialog = CommandLineArgsDialog(module_path, host, username, password, self)
+                nessus_finding_name = None
+                if args_dialog.has_arguments():
+                    if args_dialog.exec_() == QDialog.Accepted:
+                        args, file_paths, nessus_finding_name = args_dialog.get_arguments()
+                        if nessus_finding_name:
+                            nessus_finding_name = nessus_finding_name.strip('# ').lower()
 
-            full_command = (f"{module_path} {args}", file_paths)
-            self.add_ssh_tab(host, username, password, full_command, is_script_path=True, nessus_finding_name=nessus_finding_name)
-
+                full_command = (f"{module_path} {args}", file_paths)
+                self.add_ssh_tab(host, username, password, full_command, is_script_path=True, nessus_finding_name=nessus_finding_name)
+        except Exception:
+            pass # catch all since errors are not handled here
 
     def open_tab_group(self, command, is_script_path=True, group_name=None, group_color=None):
         drone_id = self.drone_selector.currentText()
