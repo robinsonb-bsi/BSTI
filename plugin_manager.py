@@ -285,7 +285,7 @@ class PluginManager:
 
     def write_changes(self):
         self.update_config()
-        log.success("Changes written to config.json.")
+        log.success("Changes written to N2P_config.json.")
 
     def write_to_temp_file(self, temp_changes):
         with open(self.TEMP_FILE, 'w') as f:
@@ -301,7 +301,7 @@ class PluginManager:
                     [pid for pid in plugin_ids if pid not in self.config['plugins'][category]['ids']])
             else:
                 log.error(f"Error: The category '{category}' does not exist in the config.")
-        self.write_json_file('config.json', self.config)
+        self.write_json_file('N2P_config.json', self.config)
         self.temp_changes.clear()
 
     def cleanup(self):
@@ -341,7 +341,7 @@ class ArgParser:
 if __name__ == "__main__":
     try:
         args = ArgParser.parse_args()
-        manager = PluginManager('config.json', args.csv_file_path)
+        manager = PluginManager('N2P_config.json', args.csv_file_path)
 
         # Identify merged and individual findings
         merged_findings, individual_findings = manager.identify_merged_findings()

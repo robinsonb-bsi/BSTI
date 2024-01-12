@@ -21,3 +21,4 @@
 - view nmb logs in the UI now
 - pause button for nmb
 - metadata for modules to map to nessus findings, then convert to md5 when saving the screenshot
+- plugin_manager and create report functionality added

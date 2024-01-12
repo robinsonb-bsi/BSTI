@@ -22,6 +22,7 @@ import threading
 import signal
 import hashlib
 import warnings
+import shlex
 warnings.filterwarnings("ignore", category=DeprecationWarning, 
                         message=".*sipPyTypeDict.*") # hushes annoying errors for now temp solution
 
@@ -80,7 +81,7 @@ LABEL_STYLESHEET = """
     }
 """
 
-closeButtonStyle = """
+CLOSE_BUTTON_STYLE = """
     QPushButton {
         border: none;
         padding: 4px;
@@ -889,7 +890,7 @@ class MainWindow(QMainWindow):
         self.nessus_finding_name = None
         self.nessus_findings_map = {}
         self.setWindowTitle("Bulletproof Solutions Testing Interface")
-        self.setGeometry(100, 100, 800, 600)
+        self.setGeometry(100, 100, 2200, 1200)
         self.threads = []
 
         self.layout = QVBoxLayout()
@@ -946,9 +947,21 @@ class MainWindow(QMainWindow):
         self.create_report_action.triggered.connect(self.create_report)
         self.report_menu.addAction(self.create_report_action)
 
-        self.report_findings_action = QAction("Report Findings", self)
+        # Plugin manager button
+        self.plugin_manager_action = QAction("Plugin Manager", self)
+        self.plugin_manager_action.triggered.connect(self.run_plugin_manager)
+        self.report_menu.addAction(self.plugin_manager_action)
+
+        # Import findings into plextrac
+        self.report_findings_action = QAction("Upload Findings to Plextrac", self)
         self.report_findings_action.triggered.connect(self.report_findings_execution)
         self.report_menu.addAction(self.report_findings_action)
+
+        # Help menu for docs
+        self.help_menu = self.menu_bar.addMenu("Help")
+        self.help_menu_action = QAction("View Documentation", self)
+        self.help_menu_action.triggered.connect(self.open_documentation)
+        self.help_menu.addAction(self.help_menu_action)
 
 
         # Drone selection layout
@@ -1051,6 +1064,26 @@ class MainWindow(QMainWindow):
         # hide/show tabs based on active tab
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
 
+    def open_documentation(self):
+        tab = QWidget()
+        tab.is_custom_tab = True
+        layout = QVBoxLayout(tab)
+        documentation_file = os.path.join("wiki", "docs.html")
+        web_view = QWebView()
+        web_view.load(QUrl.fromLocalFile(os.path.abspath(documentation_file)))
+        layout.addWidget(web_view)
+        self.tab_widget.addTab(tab, "Wiki")
+        # Add close button to the tab
+        close_button = QPushButton()
+        close_button.setIcon(self.style().standardIcon(QStyle.SP_DockWidgetCloseButton))
+        close_button.setStyleSheet(CLOSE_BUTTON_STYLE)
+        close_button.setFixedSize(16, 16)
+        close_button.setToolTip("Close Tab")
+        close_button.setProperty('tab_widget', tab)
+        close_button.clicked.connect(self.close_tab_from_button)
+
+        self.tab_widget.tabBar().setTabButton(self.tab_widget.indexOf(tab), QTabBar.RightSide, close_button)
+    
 
     def create_report(self):
         # Open the custom dialog
@@ -1070,6 +1103,22 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 QMessageBox.warning(self, "Error", f"Failed to execute the command: {e}")
 
+    def run_plugin_manager(self):
+        csv_file, _ = QFileDialog.getOpenFileName(self, "Select CSV File", "", "CSV Files (*.csv)")
+        if not csv_file:
+            return
+        
+        csv_file_escaped = shlex.quote(csv_file)
+        python_command = f"python plugin_manager.py -f {csv_file_escaped}"
+
+        try:
+            if sys.platform == "win32":
+                ps_command = f"Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoExit', '-Command', \"{python_command}\""
+                subprocess.Popen(['powershell', '-Command', ps_command], shell=True)
+            else:
+                subprocess.Popen(['gnome-terminal', '--', 'bash', '-c', python_command])
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to execute the command: {e}")
 
     def report_findings_execution(self):
         # Open the dialog to get arguments
@@ -1120,7 +1169,7 @@ class MainWindow(QMainWindow):
     def add_close_button_to_tab(self, tab, index):
         close_button = QPushButton()
         close_button.setIcon(self.style().standardIcon(QStyle.SP_DockWidgetCloseButton))
-        close_button.setStyleSheet(closeButtonStyle)
+        close_button.setStyleSheet(CLOSE_BUTTON_STYLE)
         close_button.setFixedSize(16, 16)
         close_button.setToolTip("Close Tab")
         close_button.setProperty('tab_widget', tab)
@@ -1171,7 +1220,7 @@ class MainWindow(QMainWindow):
             # Add close button to the tab
             close_button = QPushButton()
             close_button.setIcon(self.style().standardIcon(QStyle.SP_DockWidgetCloseButton))
-            close_button.setStyleSheet(closeButtonStyle)
+            close_button.setStyleSheet(CLOSE_BUTTON_STYLE)
             close_button.setFixedSize(16, 16)
             close_button.setToolTip("Close Tab")
             close_button.setProperty('tab_widget', tab)
@@ -1268,12 +1317,14 @@ class MainWindow(QMainWindow):
         self.buttons_layout = QHBoxLayout()
         # Run button
         self.execute_nmb_button = QPushButton("Run")
+        self.execute_nmb_button.setCursor(Qt.PointingHandCursor)
         self.execute_nmb_button.setObjectName("ExecuteNMBButton")
         self.execute_nmb_button.clicked.connect(self.execute_nmb)
         self.buttons_layout.addWidget(self.execute_nmb_button)
 
         # Pause button
         self.pause_button = QPushButton("Pause", self)
+        self.pause_button.setCursor(Qt.PointingHandCursor)
         self.pause_button.clicked.connect(self.on_pause_clicked)
         self.buttons_layout.addWidget(self.pause_button)
 
@@ -2042,7 +2093,7 @@ class MainWindow(QMainWindow):
         close_button = QPushButton()
         close_button.setCursor(Qt.PointingHandCursor)
         close_button.setIcon(self.style().standardIcon(QStyle.SP_DockWidgetCloseButton))  # Or use a custom icon
-        close_button.setStyleSheet(closeButtonStyle)
+        close_button.setStyleSheet(CLOSE_BUTTON_STYLE)
         close_button.setFixedSize(16, 16)
         close_button.setToolTip("Close Tab")
         close_button.setProperty('tab_widget', tab)
