@@ -30,13 +30,13 @@ warnings.filterwarnings("ignore", category=DeprecationWarning,
 # TODO 
 """
 organize code :(
-Integration with n2p tabs/menu bar --> main execution is done, need to figure out report gen and plugin manager
-home page diagnostics -> move file transfer tab?
 parser for csv built-in
 setup project folder per session
 fix halo spinner on n2p and nmb
 
 # Done
+Integration with n2p tabs/menu bar --> main execution is done, need to figure out report gen and plugin manager
+home page diagnostics -> move file transfer tab?
 metadata for modules to map to nessus findings, then convert to md5 when saving the screenshot
 pause button for nmb
 open NMB json for editing

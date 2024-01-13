@@ -1,313 +1,849 @@
 <!DOCTYPE html>
 <html>
- <head>
-  <title>
-   Bulletproof Solutions Testing Interface
-  </title>
-  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
-  <style>
-   body, html {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #121212;
-            color: #ffffff;
-        }
-        #container {
-            display: flex;
-        }
-        #sidebar {
-            width: 250px;
-            background-color: #1e1e1e;
-            position: fixed;
-            top: 0;
-            bottom: 0;
-            overflow-y: auto;
-            transition: width 0.3s;
-        }
-        #sidebar.hide {
-            width: 0;
-        }
-        #content {
-            margin-left: 250px;
-            padding: 20px;
-            transition: margin-left 0.3s;
-        }
-        #content.move {
-            margin-left: 0;
-        }
-        h1, h2 {
-            margin-top: 20px;
-        }
-        pre {
-            background-color: #2e2e2e;
-            padding: 10px;
-            border-radius: 4px;
-            color: #e0e0e0;
-        }
-        #menu-btn {
-            font-size: 30px;
-            cursor: pointer;
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            z-index: 1000;
-        }
-        ol {
-            list-style-type: none;
-            padding: 0;
-        }
-        ol li {
-            padding: 8px;
-            text-align: center;
-        }
-        ol li a {
-            color: #ffffff;
-            text-decoration: none;
-        }
-        ol li:hover {
-            background-color: #353535;
-        }
-  </style>
- 
-<style>
-  /* Style for collapsible button */
-  .collapsible {
-    cursor: pointer;
-    border: none;
-    outline: none;
-    text-align: left;
-    background-color: transparent;
-    color: #ffffff;
-    font-size: 1.5em;
-  }
-  /* Style for animated arrow */
-  .arrow {
-    float: right;
-    transition: transform 0.3s ease;
-  }
-  .rotate {
-    transform: rotate(90deg);
-  }
-</style>
-<script>
-  // JavaScript for collapsible functionality and animated arrow
-  document.addEventListener("DOMContentLoaded", function() {
-    var coll = document.getElementsByClassName("collapsible");
-    for (var i = 0; i < coll.length; i++) {
-      coll[i].addEventListener("click", function() {
-        this.classList.toggle("active");
-        var content = this.nextElementSibling;
-        var arrow = this.getElementsByClassName("arrow")[0];
-        if (content.style.display === "block") {
-          content.style.display = "none";
-          arrow.classList.remove("rotate");
-        } else {
-          content.style.display = "block";
-          arrow.classList.add("rotate");
-        }
-      });
-    }
-  });
-</script>
-
-
-<style>
-  /* Style for search input */
-  #searchInput {
-    width: 90%;
-    padding: 8px;
-    margin: 8px auto;
-    box-sizing: border-box;
-    border-radius: 4px;
-    border: 1px solid #ccc;
-    background-color: #2e2e2e;
-    color: #ffffff;
-  }
-</style>
-
+<head>
+    <meta charset="UTF-8">
+    <title>BSTI Documentation</title>
 </head>
- <body>
-  <div id="menu-btn" onclick="toggleSidebar()">
-   <i class="material-icons">
-    menu
-   </i>
-  </div>
-  <div id="container">
-   
-<div id="sidebar">
-  <h2 style="text-align: center;">
-    Contents
-  </h2>
-  <ol>
-    <li>
-      <a href="#introduction">
-        Introduction
-      </a>
-    </li>
-    <li>
-      <a href="#installation">
-        Installation
-      </a>
-    </li>
-    <li>
-      <a href="#usage">
-        Usage
-      </a>
-    </li>
-    <li>
-      <a href="#api-reference">
-        API Reference
-      </a>
-    </li>
-    <li>
-      <a href="#faq">
-        FAQ
-      </a>
-    </li>
-    <li>
-      <a href="#version-history">
-        Version History
-      </a>
-    </li>
-  </ol>
-  <!-- Search Functionality -->
-  <input type="text" id="searchInput" onkeyup="searchDocumentation()" placeholder="Search...">
+<style>
+body {
+  background-color: #121212;
+  color: #e0e0e0;
+  font-family: Arial, sans-serif;
+}
+
+.topnav {
+  background-color: #333;
+  overflow: hidden;
+}
+
+.topnav a {
+  float: left;
+  display: block;
+  color: #f2f2f2;
+  text-align: center;
+  padding: 14px 16px;
+  text-decoration: none;
+  font-size: 17px;
+}
+
+.topnav a:hover {
+  background-color: #ddd;
+  color: black;
+}
+
+.topnav a.active {
+  background-color: #4CAF50;
+  color: white;
+}
+
+/* Add some padding to the page content to prevent it from overlapping the fixed top navigation bar */
+.content {
+  padding-top: 60px;
+}
+</style>
+<style>
+.topnav {
+  position: fixed;
+  top: 0;
+  width: 100%;
+  z-index: 1;
+}
+
+/* Adding a padding-top to the body to ensure content is not hidden behind the fixed navbar */
+body {
+  padding-top: 50px;
+}
+</style>
+<style>
+.topnav {
+  background-color: #333;
+  overflow: hidden;
+  font-family: Arial, sans-serif;
+}
+
+.topnav a {
+  float: left;
+  color: #f2f2f2;
+  text-align: center;
+  padding: 14px 16px;
+  text-decoration: none;
+  font-size: 17px;
+}
+
+.topnav a:hover {
+  background-color: #ddd;
+  color: black;
+}
+
+.topnav a.active {
+  background-color: #4CAF50;
+  color: white;
+}
+</style>
+<div class="topnav"><a class="active" href="#-using-bsti">BSTI</a><a href="#nmb">NMB</a><a href="#-disclaimer">nessus2plextrac-ng</a></div><div align="center">
+<h1 align="center">
+<img src="https://github.com/fancyc-bsi/BSTI/blob/main/assets/bsti.png?raw=true" width="300"/>
+<br/>
+</h1>
 </div>
-
-    <h2 style="text-align: center;">
-     Contents
-    </h2>
-    <ol>
-     <li>
-      <a href="#introduction">
-       Introduction
-      </a>
-     </li>
-     <li>
-      <a href="#installation">
-       Installation
-      </a>
-     </li>
-     <li>
-      <a href="#usage">
-       Usage
-      </a>
-     </li>
-     <li>
-      <a href="#api-reference">
-       API Reference
-      </a>
-     </li>
-    </ol>
-   </div>
-   <div id="content">
-    <h1>
-      Bulletproof Solutions Testing Interface Documentation - Not yet implimented
-    </h1>
-    <hr/>
-    <h2 id="introduction">
-     Introduction
-    </h2>
-    <p>
-     This is the documentation for the
-     <code>
-      Bulletproof Solutions Testing Interface
-     </code>
-     Python application. This application is designed to [Provide a brief description of what the application does].
-    </p>
-    <hr/>
-    <h2 id="installation">
-     Installation
-    </h2>
-    <p>
-     To install the application, follow these steps:
-    </p>
-    <ol>
-     <li>
-      [Step 1]
-     </li>
-     <li>
-      [Step 2]
-     </li>
-     <li>
-      [Step 3]
-     </li>
-    </ol>
-    <hr/>
-    <h2 id="usage">
-     Usage
-    </h2>
-    <p>
-     To use the application, run the following command:
-    </p>
-    <pre>
-        [Your command here]
-        </pre>
-   
-<button class="collapsible">API Reference <span class="arrow">&#9654;</span></button>
-<div id="api-collapse" style="display: none;">
-  <h2 id="api-reference">API Reference</h2><hr/>
-</div>
-
-<!-- FAQ Section -->
-<h2 id="faq">Frequently Asked Questions (FAQ)</h2>
+<p align="center">
+  Bulletproof Solutions Testing Interface
+  </p>
 <hr/>
-<p>Q: [Your question here]</p>
-<p>A: [Your answer here]</p>
-<!-- More Q&A can be added here -->
-
-<!-- Version History -->
-<h2 id="version-history">Version History</h2>
+<h2 id="-table-of-contents">📒 Table of Contents</h2>
+<ul>
+<li><a href="#-table-of-contents">📒 Table of Contents</a></li>
+<li><a href="#-overview">📍 Overview</a><ul>
+<li><a href="#features">Features</a></li>
+</ul>
+</li>
+<li><a href="#-getting-started">🚀 Getting Started</a><ul>
+<li><a href="#️-prerequisites">✔️ Prerequisites</a><ul>
+<li><a href="#windows">Windows</a></li>
+<li><a href="#macos">MacOS</a></li>
+<li><a href="#debian-based-os">Debian based OS</a></li>
+</ul>
+</li>
+<li><a href="#-installation">💻 Installation</a></li>
+</ul>
+</li>
+<li><a href="#-using-bsti">🎮 Using BSTI</a><ul>
+<li><a href="#first-steps-and-connecting">First Steps and Connecting</a></li>
+<li><a href="#understanding-the-interface">Understanding the Interface</a></li>
+<li><a href="#home-tab">Home Tab</a></li>
+<li><a href="#module-editor">Module Editor</a></li>
+<li><a href="#view-logs">View Logs</a></li>
+<li><a href="#modules">Modules</a><ul>
+<li><a href="#json-format">JSON Format</a></li>
+<li><a href="#argument-metadata">Argument Metadata</a></li>
+<li><a href="#file-upload-metadata">File Upload Metadata</a></li>
+<li><a href="#nessus-mapping-metadata">Nessus Mapping Metadata</a></li>
+<li><a href="#tmux-for-interactive-commands">Tmux For Interactive Commands</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#integrations">Integrations</a><ul>
+<li><a href="#nessus2plextrac-ng">Nessus2Plextrac-ng</a></li>
+<li><a href="#nmb">NMB</a></li>
+<li><a href="#file-viewer">File Viewer</a></li>
+</ul>
+</li>
+<li><a href="#contributing-to-bsti">Contributing to BSTI</a></li>
+</ul>
 <hr/>
-<p>Version 1.0.0 - Initial release</p>
-<!-- More version history can be added here -->
-
-<!-- Footer with Additional Resources -->
-<footer style="margin-top: 50px;">
-  <h2>Additional Resources</h2>
-  <ul>
-    <li><a href="[GitHub repository link]">GitHub Repository</a></li>
-    <!-- More resources can be added here -->
-  </ul>
-</footer>
-
-
-<!-- Search Functionality -->
-<script>
-  function searchDocumentation() {
-    var input, filter, content, paragraphs, i, txtValue;
-    input = document.getElementById("searchInput");
-    filter = input.value.toUpperCase();
-    content = document.getElementById("content");
-    paragraphs = content.getElementsByTagName("p");
-    
-    for (i = 0; i < paragraphs.length; i++) {
-      txtValue = paragraphs[i].textContent || paragraphs[i].innerText;
-      if (txtValue.toUpperCase().indexOf(filter) > -1) {
-        paragraphs[i].style.display = "";
-      } else {
-        paragraphs[i].style.display = "none";
-      }
-    }
+<h2 id="-overview">📍 Overview</h2>
+<h3 id="features">Features</h3>
+<hr/>
+<h2 id="-getting-started">🚀 Getting Started</h2>
+<h3 id="-prerequisites">✔️ Prerequisites</h3>
+<p><strong>Very important that Python3.9 is installed.</strong></p>
+<p>To take screenshots, wkhtmltopdf is required:</p>
+<h4 id="windows">Windows</h4>
+<ul>
+<li><a href="https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6-1/wkhtmltox-0.12.6-1.msvc2015-win64.exe">https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6-1/wkhtmltox-0.12.6-1.msvc2015-win64.exe</a></li>
+</ul>
+<h4 id="macos">MacOS</h4>
+<ul>
+<li><a href="https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6-2/wkhtmltox-0.12.6-2.macos-cocoa.pkg">https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6-2/wkhtmltox-0.12.6-2.macos-cocoa.pkg</a></li>
+</ul>
+<h4 id="debian-based-os">Debian based OS</h4>
+<pre><code class="lang-bash">sudo apt <span class="hljs-keyword">update</span> &amp;&amp; sudo apt <span class="hljs-keyword">install</span> wkhtmltopdf -y
+  </code></pre>
+<h3 id="-installation">💻 Installation</h3>
+<pre><code class="lang-bash"><span class="hljs-keyword">Install</span> the <span class="hljs-keyword">required</span> Python packages:
+  
+  pip <span class="hljs-keyword">install</span> -r requirements.txt
+  
+  # <span class="hljs-keyword">For</span> NMB + Reporting functionality
+  pip <span class="hljs-keyword">install</span> -r nmb_n2p_requirements.txt
+  </code></pre>
+<hr/>
+<h2 id="-using-bsti">🎮 Using BSTI</h2>
+<pre><code class="lang-bash">
+  <span class="hljs-keyword">python</span> bsti.<span class="hljs-keyword">py</span>
+  </code></pre>
+<h3 id="first-steps-and-connecting">First Steps and Connecting</h3>
+<p>To connect to a BSTG, click "Config" in the top-left corner, then "Configure new BSTG" and enter the login details.<br/>If you've already connected to that BSTG with BSTI before, it'll show up in the bottom left corner. You can change this on the fly by clicking in that space and selecting another BSTG from the dropdown menu.</p>
+<p>The dropdown menu is very important now, the BSTG mentioned in that box will be your "Active BSTG" and a lot of the functionality built within this app relies on that active connection. Ensure you are using the correct BSTG.</p>
+<p>It is highly recommended to add your public ssh key to the BSTG to prevent the need for password authentication. This can be done from the UI here:</p>
+<p><img alt="image" src="https://github.com/fancyc-bsi/BSTI/assets/85493503/e3e143bd-b3b9-4f1c-bd18-51654f4e04f8"/></p>
+<h3 id="understanding-the-interface">Understanding the Interface</h3>
+<p>BSTI uses a 'tab' system similar to a browser, almost every tab can be closed except for the core tabs like home, logs, NMB and the IDE. </p>
+<p><strong>Note:</strong> When you close a tab you are also killing the process.</p>
+<h3 id="home-tab">Home Tab</h3>
+<p>This page displays your currently connected bstg's diagnostic info, a link to their nessus instance and plextrac. It will tell you if you currently connected bstg is online and show output from the 'top' command.</p>
+<p>Additionally, if you need to transfer files to and from the BSTG you can do so from the home page.</p>
+<p><img alt="image" src="https://github.com/fancyc-bsi/BSTI/assets/85493503/f984d7b1-26ae-49d1-8d9c-369db24b0d4d"/></p>
+<h3 id="module-editor">Module Editor</h3>
+<p>This page displays the code for the module that is currently selected. If you would like to edit a module you can do so here directly. Just make sure you click <strong>Save Module</strong> if you want your changes to be written, otherwise they will be stored in a tempfile.  </p>
+<p>To select another module click on the box next to "Choose a module to run:" and it will open a dropdown menu of available modules. To execute, simply click "Execute Module" in the bottom right corner, enter any arguments (If necessary), and click "Submit".  </p>
+<p>Search for a module will load the closest match, the naming convention is like this: [category]-[protocol]-[tool-used]-[module-name].sh. </p>
+<p>The module editor also features some syntax highlighting with plans to include metadata linting in the future.</p>
+<p><img alt="image" src="https://github.com/fancyc-bsi/BSTI/assets/85493503/43adc865-ace0-4ed6-9ded-0ad036604af2"/></p>
+<h3 id="view-logs">View Logs</h3>
+<p>This tab will automatically populate with the output from every module that is run. Here are the following options:</p>
+<ul>
+<li>Clicking "Take Screenshot" will generate a screenshot of the entire log. You can crop this afterwards to fit your needs.</li>
+<li>Delete Logs</li>
+<li>Refresh Logs</li>
+</ul>
+<p>Adding the nessus command mapping metadata, the FIRST screenshot taken of the corresponding log will be in the md5 hash format that n2p-ng expects. This is useful for more advanced exploitation that NMB cannot cover.</p>
+<p><img alt="image" src="https://github.com/fancyc-bsi/BSTI/assets/85493503/22d48e9a-1e17-4026-b1fb-0179eca322f4"/></p>
+<hr/>
+<h3 id="modules">Modules</h3>
+<p>To create a new module click Modules -&gt; Create New. This will create a new file in the Modules directory and automatically populate a template to use in the Module Editor tab.</p>
+<p>Currently BSTI supports modules written in bash, python, and json. Bash and Python scripts handle actions that can be performed in a single tab, while the JSON format has been setup to allow a single module to perform multiple actions in different tabs.</p>
+<h4 id="json-format">JSON Format</h4>
+<p>The format for the JSON file should be the following:</p>
+<pre><code class="lang-json">{
+      <span class="hljs-attr">"grouped"</span>: <span class="hljs-literal">true</span>,
+      <span class="hljs-attr">"tabs"</span>: [
+          {
+              <span class="hljs-attr">"name"</span>: <span class="hljs-string">"Responder"</span>,
+              <span class="hljs-attr">"command"</span>: <span class="hljs-string">"echo 'test'"</span>
+          },
+          {
+              <span class="hljs-attr">"name"</span>: <span class="hljs-string">"Echo 1"</span>,
+              <span class="hljs-attr">"command"</span>: <span class="hljs-string">"echo 'Tab 1' &amp;&amp; sleep 3600"</span>
+          },
+          {
+              <span class="hljs-attr">"name"</span>: <span class="hljs-string">"Echo 2"</span>,
+              <span class="hljs-attr">"command"</span>: <span class="hljs-string">"echo 'Tab 2' &amp;&amp; sleep 3600"</span>
+          }
+      ]
   }
-</script>
-<input type="text" id="searchInput" onkeyup="searchDocumentation()" placeholder="Search for FAQs...">
-
+  </code></pre>
+<h4 id="argument-metadata">Argument Metadata</h4>
+<p>BSTI has been built with a specific syntax to handle command line arguments that are needed for a module. These are specified in the comment blocks at the top of each module. </p>
+<p>As an example, here is a sample of one module that is meant to search for NSE scripts, Searchsploit, and Metasploit based on the the arguments provided:</p>
+<pre><code><span class="hljs-meta">#!/bin/bash or #!/usr/bin/env python3</span>
+  <span class="hljs-meta"># ARGS</span>
+  <span class="hljs-meta"># NSE "NSE Query String" </span>
+  <span class="hljs-meta"># searchsploit "Query String"</span>
+  <span class="hljs-meta"># MSF "MSF Search String"</span>
+  <span class="hljs-meta"># ENDARGS</span>
+  </code></pre><p>The metadata section is denoted by the <code>ARGS</code> and <code>ENDARGS</code> comments. These are read in the order that they appear, so <code>NSE_QUERY_STRING</code> would be the first argument ($1), then searchsploit ($2), etc...</p>
+<h4 id="file-upload-metadata">File Upload Metadata</h4>
+<p>BSTI also has an option to include file upload as part of the modules execution flow. The way this works is that it will ask for the path to a local file and upload that to the bstg to the path thats specified in the metadata.</p>
+<pre><code><span class="hljs-meta">#!/bin/bash or #!/usr/bin/env python3</span>
+  <span class="hljs-meta"># STARTFILES</span>
+  <span class="hljs-meta"># targets.txt "Targets description"</span>
+  <span class="hljs-meta"># ENDFILES</span>
+  <span class="hljs-meta"># ARGS</span>
+  <span class="hljs-meta"># ARG_NAME "arg description"</span>
+  <span class="hljs-meta"># ENDARGS</span>
+  <span class="hljs-meta"># AUTHOR:</span>
+  </code></pre><p>This is useful for instance if you want to create a module that uses nmap, and you want to specify a file for the targets. This way you don't have to go through a seperate process of creating the target file on the bstg and remembering the remote path. You can just create the file locally and upload it when you execute the module.</p>
+<p>The files that are uploaded are automatically stored in the /tmp/ directory.</p>
+<h4 id="nessus-mapping-metadata">Nessus Mapping Metadata</h4>
+<p>Here you can define a nessus finding to be mapped to the output log - meaning once you take a screenshot of the log using BSTI, it will save it in the format that n2p-ng expects. </p>
+<pre><code class="lang-bash"><span class="hljs-meta"># NESSUSFINDING</span>
+  <span class="hljs-meta"># SSH Server CBC Mode Ciphers Enabled</span>
+  <span class="hljs-meta"># ENDNESSUS</span>
+  </code></pre>
+<h4 id="tmux-for-interactive-commands">Tmux For Interactive Commands</h4>
+<p>The execution of modules can be sent to a tmux session, the UI features a menu option to attach to these sessions. This is intended to be for reverse shells or other modules needing interactive output, here is an example:</p>
+<pre><code class="lang-bash"><span class="hljs-meta">#!/bin/bash</span>
+  <span class="hljs-comment"># ARGS</span>
+  <span class="hljs-comment"># PORT "Desired port for netcat"</span>
+  <span class="hljs-comment"># ENDARGS</span>
+  <span class="hljs-comment"># AUTHOR: </span>
+  <span class="hljs-comment"># This script starts a Netcat listener inside a tmux session</span>
+  
+  <span class="hljs-comment"># Define your tmux session name and Netcat listening port</span>
+  TMUX_SESSION=<span class="hljs-string">"nc_listener"</span>
+  NC_PORT=<span class="hljs-variable">$1</span>
+  
+  <span class="hljs-comment"># Check if the tmux session already exists</span>
+  <span class="hljs-keyword">if</span> tmux has-session -t <span class="hljs-variable">$TMUX_SESSION</span> 2&gt;/dev/null; <span class="hljs-keyword">then</span>
+      <span class="hljs-built_in">echo</span> <span class="hljs-string">"Session <span class="hljs-variable">$TMUX_SESSION</span> already exists."</span>
+      <span class="hljs-built_in">echo</span> <span class="hljs-string">"Use 'tmux attach -t <span class="hljs-variable">$TMUX_SESSION</span>' to interact with the session."</span>
+  <span class="hljs-keyword">else</span>
+      <span class="hljs-built_in">echo</span> <span class="hljs-string">"Creating new tmux session named <span class="hljs-variable">$TMUX_SESSION</span> and starting Netcat listener on port <span class="hljs-variable">$NC_PORT</span>..."</span>
+      <span class="hljs-comment"># Create a new tmux session and run Netcat</span>
+      tmux new-session <span class="hljs-_">-d</span> <span class="hljs-_">-s</span> <span class="hljs-variable">$TMUX_SESSION</span> <span class="hljs-string">"nc -lvnp <span class="hljs-variable">$NC_PORT</span>"</span>
+      <span class="hljs-built_in">echo</span> <span class="hljs-string">"Netcat listener started in tmux session <span class="hljs-variable">$TMUX_SESSION</span> on port <span class="hljs-variable">$NC_PORT</span>"</span>
+      <span class="hljs-built_in">echo</span> <span class="hljs-string">"Use 'tmux attach -t <span class="hljs-variable">$TMUX_SESSION</span>' or the UI to interact with the session."</span>
+  <span class="hljs-keyword">fi</span>
+  </code></pre>
+<p>BSTI will then search for active tmux sessions on your active BSTG, you can click the menu option to connect to the session in your local terminal (powershell for windows, gnome-terminal for unix). Shown here:</p>
+<p><img alt="image" src="https://github.com/fancyc-bsi/BSTI/assets/85493503/a977393a-3f01-4f7f-8c06-c4a4921b1060"/></p>
+<p>You can also access the terminal of your active BSTI from the same menu.</p>
+<h2 id="integrations">Integrations</h2>
+<p>BSTI is designed to be a complete solution, the tester should be able to perform most of their assessment from the application, and whatever they can't do - they can build within BSTI.</p>
+<h4 id="nessus2plextrac-ng">Nessus2Plextrac-ng</h4>
+<p>To use n2p-ng within BSTI, you need to ensure you installed the depends (mostly everyone should already have this installed)
+  The functionality is the same, just slightly different since there is no interactive terminal within BSTG. </p>
+<p>From the 'Reports' menu, you can select from all the functionality n2p-ng has to offer:</p>
+<p><img alt="image" src="https://github.com/fancyc-bsi/BSTI/assets/85493503/feef75ac-5575-4355-b2f0-c833af653ae8"/></p>
+<p>Selecting 'plugin manager' or 'Create report' will open an interactive local terminal session (powershell or gnome-termninal). These behave just like the command line you are already used to. </p>
+<p>Ensure you keep note of the clientID and reportID when creating a report, before closing the process window (or pressing enter at the final prompt).</p>
+<h4 id="nmb">NMB</h4>
+<p>BSTI also includes NMB integration - you can control all the usual functionality from the UI.</p>
+<p>The arguments are dynamically generated based on the 'mode' you select. For example:</p>
+<p><img alt="image" src="https://github.com/fancyc-bsi/BSTI/assets/85493503/6ab5ee56-3305-4636-ba56-8513503bc3fe"/></p>
+<p>NMB will then use your active BSTG and attempt to run based on the arguments you provided.</p>
+<p>You can 'pause' the execution of NMB's finding validation (internal/external mode or deploy mode's finding validation). This will save the current state, hitting 'run' again using either internal or external mode will resume from the previous execution state.</p>
+<h4 id="file-viewer">File Viewer</h4>
+<p>BSTI can render html, csv and json files from clicking 'File' in the top left of the menu bar.</p>
+<p>You can open up summaries from NMB or Interpreter as shown below:</p>
+<p><img alt="image" src="https://github.com/fancyc-bsi/BSTI/assets/85493503/557902bf-2b9a-4501-90bb-bc782f5a2705"/></p>
+<p>Or, you can open a csv file in a 'grid-like' format:</p>
+<p><img alt="image" src="https://github.com/fancyc-bsi/BSTI/assets/85493503/e9227393-5e33-477b-a4fe-75d7c3078f54"/></p>
+<p>Parsing the csv file and providing filters is on the to-do list but is not yet added.</p>
+<h2 id="contributing-to-bsti">Contributing to BSTI</h2>
+<p>Interested in contributing to this project?</p>
+<p>Check out the dev guide <a href="https://github.com/fancyc-bsi/BSTI/blob/main/DEVGUIDE.md">here</a>.</p>
+<div align="center">
+<h1 align="center">
+<img src="https://raw.githubusercontent.com/PKief/vscode-material-icon-theme/main/icons/nano-staged_light.svg" width="100"/>
+<br/>
+  NMB
+  </h1>
+<p align="center">
+<img alt="Python" src="https://img.shields.io/badge/Python-3776AB.svg?style&amp;logo=Python&amp;logoColor=white"/>
+</p>
 </div>
-  </div>
-  <script>
-   function toggleSidebar() {
-        var sidebar = document.getElementById("sidebar");
-        var content = document.getElementById("content");
-        if (sidebar.style.width === "0px" || sidebar.style.width === "") {
-            sidebar.style.width = "250px";
-            content.style.marginLeft = "250px";
-        } else {
-            sidebar.style.width = "0px";
-            content.style.marginLeft = "0px";
-        }
-    }
-  </script>
- </body>
-</html>
+<hr/>
+<h2 id="-table-of-contents">📒 Table of Contents</h2>
+<ul>
+<li><a href="#-table-of-contents">📒 Table of Contents</a></li>
+<li><a href="#-overview">📍 Overview</a><ul>
+<li><a href="#features">Features</a></li>
+</ul>
+</li>
+<li><a href="#-project-structure">📂 Project Structure</a></li>
+<li><a href="#-getting-started">🚀 Getting Started</a><ul>
+<li><a href="#️-prerequisites">✔️ Prerequisites</a><ul>
+<li><a href="#windows">Windows</a></li>
+<li><a href="#macos">MacOS</a></li>
+<li><a href="#debian-based-os">Debian based OS</a></li>
+<li><a href="#configure-burpsuite-api">Configure Burpsuite API</a></li>
+</ul>
+</li>
+<li><a href="#-installation">💻 Installation</a></li>
+</ul>
+</li>
+<li><a href="#-using-nmb">🎮 Using NMB</a></li>
+<li><a href="#scripting-engine">Scripting Engine</a><ul>
+<li><a href="#launching-the-application">Launching the application</a></li>
+<li><a href="#using-the-engine">Using the engine</a><ul>
+<li><a href="#syntax">Syntax</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<hr/>
+<h2 id="-overview">📍 Overview</h2>
+<p>This project is a comprehensive Automated Security Testing Framework designed to simplify a wide range of security testing tasks. The framework integrates multiple security tools and services such as Nessus, MobSF, Burp Suite, and ImmuniWeb, offering a single entry point for configuring and launching different types of scans.</p>
+<h3 id="features">Features</h3>
+<pre><code>Multi-mode Operations: Supports multiple modes such as deploy, <span class="hljs-keyword">create</span>, launch, pause, <span class="hljs-keyword">resume</span>, monitor, <span class="hljs-keyword">export</span>, web, mobsf, <span class="hljs-keyword">external</span>, internal, <span class="hljs-keyword">and</span> immuniweb.
+  Flexible Target Selection: Automatically selects target files <span class="hljs-keyword">for</span> scans, allowing <span class="hljs-keyword">for</span> easy configuration.
+  Extensive <span class="hljs-keyword">Logging</span>: Built-<span class="hljs-keyword">in</span> <span class="hljs-keyword">logging</span> capabilities <span class="hljs-keyword">for</span> easy debugging <span class="hljs-keyword">and</span> traceability.
+  Environment Configuration: Utilizes environment <span class="hljs-keyword">variables</span> <span class="hljs-keyword">for</span> sensitive information <span class="hljs-keyword">like</span> API keys.
+  Credential <span class="hljs-keyword">Management</span>: Securely handles usernames <span class="hljs-keyword">and</span> passwords.
+  CSV <span class="hljs-keyword">File</span> Support: Allows <span class="hljs-keyword">for</span> the selection <span class="hljs-keyword">of</span> CSV files <span class="hljs-keyword">for</span> specific modes.
+  <span class="hljs-keyword">Policy</span> <span class="hljs-keyword">File</span> <span class="hljs-keyword">Management</span>: Finds <span class="hljs-keyword">and</span> uses Nessus <span class="hljs-keyword">policy</span> files based <span class="hljs-keyword">on</span> <span class="hljs-keyword">project</span> scope.
+  </code></pre><hr/>
+<h2 id="-project-structure">📂 Project Structure</h2>
+<pre><code class="lang-bash">repo
+  ├── nmb<span class="hljs-selector-class">.py</span>
+  ├── excel-gen<span class="hljs-selector-class">.py</span>
+  ├── key-gen<span class="hljs-selector-class">.py</span>
+  ├── scripting_engine<span class="hljs-selector-class">.py</span>
+  ├── nessus_export<span class="hljs-selector-class">.py</span>
+  ├── scripts
+  │   ├── __init__<span class="hljs-selector-class">.py</span>
+  │   ├── creator<span class="hljs-selector-class">.py</span>
+  │   ├── drone<span class="hljs-selector-class">.py</span>
+  │   ├── lackey<span class="hljs-selector-class">.py</span>
+  │   ├── logging_config<span class="hljs-selector-class">.py</span>
+  │   └── nessus<span class="hljs-selector-class">.py</span>
+  │   └── nmap_scripts<span class="hljs-selector-class">.py</span>
+  │   └── parser<span class="hljs-selector-class">.py</span>
+  ├── templates
+  │   ├── index<span class="hljs-selector-class">.html</span>
+  ├── burp
+  │   └── burp<span class="hljs-selector-class">.py</span>
+  ├── mobsf
+  │   └── dynamic<span class="hljs-selector-class">.py</span>
+  │   └── mobsf<span class="hljs-selector-class">.py</span>
+  ├── immuniweb
+  │   └── immuni.py
+  </code></pre>
+<hr/>
+<h2 id="-getting-started">🚀 Getting Started</h2>
+<h3 id="-prerequisites">✔️ Prerequisites</h3>
+<p>Python3 installed.</p>
+<p>Exported CSV file from already completed Nessus scan or use the script to export.</p>
+<p>Targets.txt file in the same directory as the script, must have the following format (separated by line break with no trailing whitespace):</p>
+<pre><code><span class="hljs-number">10.2</span><span class="hljs-number">.0</span><span class="hljs-number">.0</span>/<span class="hljs-number">16</span>
+  <span class="hljs-number">10.</span>x<span class="hljs-number">.2</span><span class="hljs-number">.2</span>
+  <span class="hljs-number">192.2</span><span class="hljs-number">.2</span><span class="hljs-number">.0</span>/<span class="hljs-number">24</span>
+  </code></pre><p>To take automatic screenshots, wkhtmltopdf is required:</p>
+<h4 id="windows">Windows</h4>
+<ul>
+<li><a href="https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6-1/wkhtmltox-0.12.6-1.msvc2015-win64.exe">https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6-1/wkhtmltox-0.12.6-1.msvc2015-win64.exe</a></li>
+</ul>
+<h4 id="macos">MacOS</h4>
+<ul>
+<li><a href="https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6-2/wkhtmltox-0.12.6-2.macos-cocoa.pkg">https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6-2/wkhtmltox-0.12.6-2.macos-cocoa.pkg</a></li>
+</ul>
+<h4 id="debian-based-os">Debian based OS</h4>
+<pre><code class="lang-bash">sudo apt <span class="hljs-keyword">update</span> &amp;&amp; sudo apt <span class="hljs-keyword">install</span> wkhtmltopdf -y
+  </code></pre>
+<h4 id="configure-burpsuite-api">Configure Burpsuite API</h4>
+<p>Burpsuite API must be enabled to allow for web scans to be conducted, make sure you have burp running as well.</p>
+<p>Please see the below screenshot for how to configure this:</p>
+<p><img alt="" src="assets/20230620_093325_bup-api-setup.PNG"/></p>
+<p>Create a new API key and copy it keep it somewhere safe until the next step.</p>
+<h3 id="-installation">💻 Installation</h3>
+<p>Unzip the repository:</p>
+<pre><code class="lang-bash">
+  unzip NMB.zip or git <span class="hljs-built_in">clone</span>
+  
+  <span class="hljs-comment"># Create a .env file to place the burpsuite API key in:</span>
+  
+  <span class="hljs-built_in">cd</span> NMB
+  vi/nano/notepad .env 
+  
+  <span class="hljs-comment"># Write the following line:</span>
+  BURP_API_KEY=Your_API_KEY
+  </code></pre>
+<pre><code class="lang-bash"><span class="hljs-keyword">Install</span> the <span class="hljs-keyword">required</span> Python packages:
+  
+  pip <span class="hljs-keyword">install</span> -r requirements.txt
+  </code></pre>
+<p><code>The script will generate the config files and unzip the plugins-*.7z for you, the first time it runs.</code></p>
+<hr/>
+<h2 id="-using-nmb">🎮 Using NMB</h2>
+<pre><code class="lang-css">
+  <span class="hljs-keyword">python</span> nmb.<span class="hljs-keyword">py</span> [OPTIONS]
+  
+  Option<span class="hljs-variable">s:</span>
+  
+      -<span class="hljs-keyword">m</span> <span class="hljs-symbol">&lt;mode&gt;</span>:
+          Choose the <span class="hljs-keyword">mode</span> of operation. Available modes are:
+          - <span class="hljs-string">"deploy"</span>: Updates settings, uploads policy <span class="hljs-keyword">file</span>, executes discovery scan, uploads targets <span class="hljs-keyword">file</span>, launches scan, monitors scan, exports results, <span class="hljs-built_in">and</span> analyzes results.
+          - <span class="hljs-string">"create"</span>: Updates settings, uploads policy <span class="hljs-keyword">file</span>, executes discovery scan, uploads targets <span class="hljs-keyword">files</span>.
+          - <span class="hljs-string">"launch"</span>: Launches scan, exports results, <span class="hljs-built_in">and</span> analyzes results.
+          - <span class="hljs-string">"pause"</span>: Pauses scan.
+          - <span class="hljs-string">"resume"</span>: Resumes scan, exports results, <span class="hljs-built_in">and</span> analyzes results.
+          - <span class="hljs-string">"monitor"</span>: Monitors scan.
+          - <span class="hljs-string">"export"</span>: Exports scan results <span class="hljs-built_in">and</span> analyzes results.
+          - <span class="hljs-string">"mobsf"</span>: Downloads APK, performs static scan, <span class="hljs-built_in">and</span> exports PDF report.
+          - <span class="hljs-string">"web"</span>: Starts Burpscan, monitors scan, exports HTML, analyzes results, <span class="hljs-built_in">and</span> takes screenshots.
+          - <span class="hljs-string">"external"</span>: Parses exported CSV, performs Nmap scans, manual finding verification, generates <span class="hljs-keyword">an</span> external report, <span class="hljs-built_in">and</span> takes screenshots.
+          - <span class="hljs-string">"internal"</span>: Parses exported CSV, performs Nmap scans, manual finding verification, generates <span class="hljs-keyword">an</span> internal report, <span class="hljs-built_in">and</span> takes screenshots.
+          - <span class="hljs-string">"immuniweb"</span>: Downloads APK/IPA, performs static scan, <span class="hljs-built_in">and</span> generates <span class="hljs-keyword">a</span> report link.
+  
+      Additional Flag<span class="hljs-variable">s:</span>
+          --discovery: Enable discovery scans <span class="hljs-keyword">for</span> <span class="hljs-string">"Deploy"</span> <span class="hljs-built_in">and</span> <span class="hljs-string">"Create"</span> modes.
+          --<span class="hljs-keyword">help</span>: Displays <span class="hljs-keyword">help</span> <span class="hljs-built_in">and</span> examples
+          --gues<span class="hljs-variable">s:</span> Only availible <span class="hljs-keyword">for</span> <span class="hljs-string">"internal"</span> <span class="hljs-built_in">and</span> <span class="hljs-string">"external"</span> modes  
+              - Enables educated guessing <span class="hljs-keyword">for</span> plugins currently not in the config, automatic screenshots are not added <span class="hljs-keyword">for</span> this <span class="hljs-keyword">mode</span> currently.   
+  
+  Example<span class="hljs-variable">s:</span>
+  
+      # Deploy <span class="hljs-keyword">mode</span>
+      nmb.<span class="hljs-keyword">py</span> -<span class="hljs-keyword">m</span> deploy -d storm -<span class="hljs-keyword">c</span> myclient -s core
+  
+      # Create <span class="hljs-keyword">mode</span>
+      nmb.<span class="hljs-keyword">py</span> -<span class="hljs-keyword">m</span> create -d localhost -<span class="hljs-keyword">c</span> myclient
+  
+      # Pause <span class="hljs-keyword">mode</span>
+      nmb.<span class="hljs-keyword">py</span> -<span class="hljs-keyword">m</span> pause -d <span class="hljs-number">10.88</span>.<span class="hljs-number">88.101</span> -<span class="hljs-keyword">c</span> myclient
+  
+      # Resume <span class="hljs-keyword">mode</span>
+      nmb.<span class="hljs-keyword">py</span> -<span class="hljs-keyword">m</span> resume -d strange -<span class="hljs-keyword">c</span> myclient
+  
+      # Internal <span class="hljs-keyword">mode</span> executed <span class="hljs-keyword">on</span> <span class="hljs-keyword">a</span> remote drone
+      nmb.<span class="hljs-keyword">py</span> -<span class="hljs-keyword">m</span> internal -d ironman
+  
+      # Internal <span class="hljs-keyword">mode</span> executed <span class="hljs-keyword">on</span> <span class="hljs-keyword">a</span> remote drone with guessing enabled
+      nmb.<span class="hljs-keyword">py</span> -<span class="hljs-keyword">m</span> internal -d ironman --guess
+  
+      # Internal <span class="hljs-keyword">mode</span> executed locally instead of <span class="hljs-keyword">on</span> the drone
+      nmb.<span class="hljs-keyword">py</span> -<span class="hljs-keyword">m</span> internal --local
+  
+      # External <span class="hljs-keyword">mode</span>
+      nmb.<span class="hljs-keyword">py</span> -<span class="hljs-keyword">m</span> external -d pendrone
+  
+      # Web <span class="hljs-keyword">mode</span> with target <span class="hljs-keyword">file</span> <span class="hljs-built_in">and</span> Burp URL specified
+      nmb.<span class="hljs-keyword">py</span> -<span class="hljs-keyword">m</span> web -<span class="hljs-keyword">tf</span> targets.txt -bu &lt;http://burpURL:port&gt;
+  
+      # Mobsf <span class="hljs-keyword">mode</span> with APK name <span class="hljs-built_in">and</span> Mobsf URL specified
+      nmb.<span class="hljs-keyword">py</span> -<span class="hljs-keyword">m</span> mobsf -<span class="hljs-keyword">an</span> <span class="hljs-keyword">com</span>.example.apk -<span class="hljs-keyword">st</span> apk -mu &lt;http://mobsfURL:port&gt;
+  
+      # Immuniweb <span class="hljs-keyword">mode</span> with IPA format <span class="hljs-built_in">and</span> APK name specified, forcing execution
+      nmb.<span class="hljs-keyword">py</span> -<span class="hljs-keyword">m</span> immuniweb --force -<span class="hljs-keyword">is</span> ipa -<span class="hljs-keyword">ia</span> <span class="hljs-keyword">com</span>.example.ipa
+  
+      # Immuniweb <span class="hljs-keyword">mode</span> with APK format <span class="hljs-built_in">and</span> APK name specified (requires IMMUNIWEB_API_KEY in .env)
+      nmb.<span class="hljs-keyword">py</span> -<span class="hljs-keyword">m</span> immuniweb -<span class="hljs-keyword">is</span> apk -<span class="hljs-keyword">ia</span> <span class="hljs-keyword">com</span>.example.apk
+  </code></pre>
+<hr/>
+<h2 id="scripting-engine">Scripting Engine</h2>
+<p>NMB now features a assisted way of creating and editing existing plugin entries.</p>
+<p>To use this:</p>
+<h4 id="launching-the-application">Launching the application</h4>
+<pre><code class="lang-bash">python scripting_engine.py
+  
+  # Navigate to http:<span class="hljs-comment">//127.0.0.1:5000 in your browser</span>
+  </code></pre>
+<h4 id="using-the-engine">Using the engine</h4>
+<blockquote>
+<ul>
+<li>Drag and drop the nmb config.json file in the top box.</li>
+<li>You can edit, add or remove existing plugins from the nmb_config.json </li>
+<li>built in parser, just paste a command line "nmap --script some-script {host} -p {port}" and it will attempt to fill the required fields for you.</li>
+</ul>
+</blockquote>
+<h3 id="syntax">Syntax</h3>
+<p>To ensure the command is correctly ran when NMB attempts to execute it, please follow this syntax:</p>
+<hr/>
+<ul>
+<li>Plugin Name: **Name of the plugin that will be written to the config file, it is recommended to have a "Custom-" prefix to you can tell the difference.</li>
+<li>Plugin IDS: Comma separated list of plugin IDs as per nessus.</li>
+<li>Scan Type: base command; nmap, curl, metasploit, ntpq, etc. </li>
+<li>Params: additional flags to be added to the command, you <strong>MUST</strong> include the placeholder {host} for the ip and <strong>OPTIONALLY</strong> {port} for the port. </li>
+<li>Verify words: Comma separated list of words that should appear in the output that will consider the finding verified, NMB uses this to determine if it should take a screenshot or not so make sure the verify words are accurate. </li>
+</ul>
+<div align="center">
+<h1 align="center">
+<img src="https://raw.githubusercontent.com/PKief/vscode-material-icon-theme/ec559a9f6bfd399b82bb44393651661b08aaf7ba/icons/folder-markdown-open.svg" width="100"/>
+<br/>nessus2plextrac-ng
+  </h1>
+<p align="center">
+<img alt="HTML5" src="https://img.shields.io/badge/HTML5-E34F26.svg?style&amp;logo=HTML5&amp;logoColor=white"/>
+<img alt="Python" src="https://img.shields.io/badge/Python-3776AB.svg?style&amp;logo=Python&amp;logoColor=white"/>
+<img alt="Markdown" src="https://img.shields.io/badge/Markdown-000000.svg?style&amp;logo=Markdown&amp;logoColor=white"/>
+</p>
+</div>
+<hr/>
+<h2 id="-table-of-contents">📒 Table of Contents</h2>
+<ul>
+<li><a href="#-table-of-contents">📒 Table of Contents</a></li>
+<li><a href="#-overview">📍 Overview</a></li>
+<li><a href="#️-disclaimer">⚠️ Disclaimer</a><ul>
+<li><a href="#limitation-of-liability">Limitation of Liability</a></li>
+<li><a href="#manual-verification">Manual Verification</a></li>
+<li><a href="#key-changes">Key Changes</a></li>
+<li><a href="#known-issues">Known Issues</a></li>
+</ul>
+</li>
+<li><a href="#️-key-improvements">⚡️ Key Improvements</a></li>
+<li><a href="#️-features">⚙️ Features</a><ul>
+<li><a href="#-screenshot-uploads">📸 Screenshot Uploads</a><ul>
+<li><a href="#file-format">File Format:</a></li>
+<li><a href="#file-naming">File Naming:</a></li>
+</ul>
+</li>
+<li><a href="#️-non-core-custom-fields">🛠️ Non-core Custom Fields</a></li>
+<li><a href="#️-non-core-tagging">🏷️ Non-core Tagging</a></li>
+<li><a href="#-internal--external-mode">🔄 Internal / External Mode</a></li>
+</ul>
+</li>
+<li><a href="#-getting-started">🚀 Getting Started</a><ul>
+<li><a href="#️-prerequisites">✔️ Prerequisites</a></li>
+<li><a href="#-installation">📦 Installation</a></li>
+<li><a href="#-using-nessus2plextrac-ng">🎮 Using nessus2plextrac-ng</a><ul>
+<li><a href="#create-a-reportclient">Create a report/client</a></li>
+<li><a href="#simulate-findings-imports--add-non-merged-plugins">Simulate findings imports / add non-merged plugins</a></li>
+<li><a href="#standard-usage-with-screenshots">standard usage with screenshots</a></li>
+<li><a href="#non-core-usage-with-screenshots">Non-core usage with screenshots</a></li>
+<li><a href="#standard-usage-without-screenshots">Standard usage without screenshots</a></li>
+</ul>
+</li>
+<li><a href="#-usage-help">❓ Usage Help</a></li>
+</ul>
+</li>
+<li><a href="#-customization">🔧 Customization</a><ul>
+<li><a href="#overview">Overview</a></li>
+<li><a href="#usage">Usage</a></li>
+<li><a href="#actions">Actions</a></li>
+</ul>
+</li>
+<li><a href="#-troubleshooting">🐞 Troubleshooting</a></li>
+<li><a href="#faq">FAQ</a><ul>
+<li><a href="#what-to-do-with-multiple-csv-files">What to do with multiple CSV files?</a></li>
+<li><a href="#what-does-this-script-do-that-the-old-one-doesnt">What does this script do that the old one doesn't?</a><ul>
+<li><a href="#additions">Additions</a></li>
+<li><a href="#removals">Removals</a></li>
+</ul>
+</li>
+<li><a href="#is-this-script-different-than-nmb">Is this script different than NMB?</a></li>
+</ul>
+</li>
+<li><a href="#-roadmap">🗺 Roadmap</a></li>
+<li><a href="#-acknowledgments">👏 Acknowledgments</a></li>
+</ul>
+<hr/>
+<h2 id="-overview">📍 Overview</h2>
+<p>This project is a overhaul of the original "Nessus2Plextrac". It aims to automate the process of uploading and processing Nessus vulnerability scan results to the PlexTrac platform. It provides core functionalities such as authentication, converting Nessus files to a PlexTrac-compatible format, uploading files and screenshots, updating descriptions for flaws, and adding custom fields. By automating these tasks, the project saves time for security teams, improves the accuracy of vulnerability reporting, and enhances the productivity of security operations.</p>
+<hr/>
+<h2 id="-disclaimer">⚠️ Disclaimer</h2>
+<h3 id="limitation-of-liability">Limitation of Liability</h3>
+<p>This script is designed to automate aspects of the reporting process for the Plextrac platform. While it aims to streamline and simplify routine tasks, it does not replace or diminish the need for professional judgment and expertise in evaluating and verifying the findings.</p>
+<h3 id="manual-verification">Manual Verification</h3>
+<p>It is strongly recommended that users conduct a comprehensive manual review of all automated outputs to validate their accuracy and completeness.</p>
+<h3 id="key-changes">Key Changes</h3>
+<p>This version of the script is intended to be used on a fresh report. If issues arise during the import process, delete all the current findings matching the scope you are trying to import and try again.</p>
+<p>If that fails then create a new report or worst case a new client.</p>
+<h3 id="known-issues">Known Issues</h3>
+<p>Currently, the merged assets custom fields for "Software Components Out of date and Vulnerable" is not fully refined. Some findings that should be grouped together are not.  </p>
+<p>Here is an example of this issue:</p>
+<p><img alt="image" src="https://github.com/rouxn-bsi/reporting-toolset/assets/85493503/1e95f108-75e8-40f8-bec0-724a4adb1619"/></p>
+<hr/>
+<h2 id="-key-improvements">⚡️ Key Improvements</h2>
+<blockquote>
+<ul>
+<li>Conflict-Free Findings: No more conflicts between internal and external findings.</li>
+<li>CSV over .nessus: Transitioned to the CSV file format, moving away from .nessus.</li>
+<li>Automated Screenshot Uploads: Integrated seamlessly with NMB.</li>
+<li>Enhanced Non-core Findings: Every uploaded non-core finding now has custom fields and tags preconfigured.</li>
+<li>Optimized Performance: Significant improvements in execution time.</li>
+<li>Client/Report Creation: Added the ability to create clients/reports from the command line.</li>
+<li>Smart Filtering: Informational findings are excluded by default, removing the need for deletions.</li>
+<li>Object-Oriented Refactor: The entire codebase is now object-oriented, making it more maintainable and encouraging collaboration.</li>
+<li>Efficient Processing: The majority of resource-intensive tasks are executed before the file upload.</li>
+</ul>
+</blockquote>
+<hr/>
+<h2 id="-features">⚙️ Features</h2>
+<h3 id="-screenshot-uploads">📸 Screenshot Uploads</h3>
+<hr/>
+<p>To ensure a successful match between a screenshot and its corresponding flaw in Plextrac, it's crucial to follow a specific naming convention for your screenshot files.</p>
+<p><strong><em>Note</em></strong>: Any screenshots gathered by NMB will already be in this format.</p>
+<h4 id="file-format-">File Format:</h4>
+<p>The screenshot files must be in PNG format.</p>
+<h4 id="file-naming-">File Naming:</h4>
+<p>The filename for each screenshot must be an MD5 hash. This hash should be the lowercase version of the corresponding plugin name as it appears in Nessus.</p>
+<p>By adhering to this naming convention, the script will be able to accurately associate each screenshot with the appropriate flaw in Plextrac.</p>
+<p><code>Example</code>:</p>
+<blockquote>
+<ul>
+<li><p>nessus plugin name: <code>web application potentially vulnerable to clickjacking</code></p>
+</li>
+<li><p>md5 hash: <code>bc0f91e658f2a774e9861b84201ef6fd</code></p>
+</li>
+</ul>
+</blockquote>
+<hr/>
+<h3 id="-non-core-custom-fields">🛠️ Non-core Custom Fields</h3>
+<hr/>
+<p>If the arg "-nc" is passed to the script, it will create the required custom fields and tags for non-core. </p>
+<p><code>Example</code>: Default Data</p>
+<blockquote>
+<p><strong>Label</strong>: Title of the recommendation - Short Recommendation</p>
+<ul>
+<li><strong>Value:</strong> FIXME</li>
+</ul>
+<p><strong>Label:</strong> Recommendation owner (who will fix the finding)</p>
+<ul>
+<li><strong>Value:</strong> Systems Administrator</li>
+</ul>
+</blockquote>
+<p><strong><em>Note:</em></strong> These will be the default values for every custom field added, fill in as you see fit.</p>
+<hr/>
+<h3 id="-non-core-tagging">🏷️ Non-core Tagging</h3>
+<hr/>
+<p>Tags will be assigned based on severity rating. They can be manually customized if required.</p>
+<p><code>Example</code>: <strong>Finding severity =&gt; High</strong></p>
+<blockquote>
+<p>priority_high</p>
+<p>complexity_complex</p>
+</blockquote>
+<p><strong><em>Note:</em></strong> This is currently the best implementation based on the information provided, it is <strong>HIGHLY</strong> recommended for the user to review these tags and apply the correct context.</p>
+<hr/>
+<h3 id="-internal-external-mode">🔄 Internal / External Mode</h3>
+<hr/>
+<p>When selecting between <code>-s internal/external</code> if the user selects "external" then every external finding will have a title prefix of (External). This can be removed by the user after script execution, but is required to help match the screenshots to the finding and prevent conflicts.</p>
+<hr/>
+<h2 id="-getting-started">🚀 Getting Started</h2>
+<h3 id="-prerequisites">✔️ Prerequisites</h3>
+<p>Before you begin, ensure that you have the following prerequisites installed:</p>
+<blockquote>
+<ul>
+<li><code>ℹ️ Python 3.9.x</code></li>
+<li><code>ℹ️ Pip</code></li>
+</ul>
+</blockquote>
+<p><strong>NOTE:</strong> Python3.10+ currently has conflicts with some of the project dependencies (pyinquirer), a virtual python environment is highly recommended unless you can fix the conflicts yourself. If you are running 3.9 you can safely ignore the pipenv steps below. Alternatively, you can use <a href="https://github.com/pyenv/pyenv">https://github.com/pyenv/pyenv</a> to setup and manage multiple instances of python.</p>
+<h3 id="-installation">📦 Installation</h3>
+<ol>
+<li><p>Clone the nessus2plextrac-ng repository:</p>
+<pre><code class="lang-sh">git <span class="hljs-keyword">clone</span> <span class="hljs-title">https</span>://github.com/rouxn-bsi/reporting-toolset/
+  </code></pre>
+</li>
+<li><p>Change to the project directory:</p>
+<pre><code class="lang-sh"><span class="hljs-built_in">cd</span> nessus2plextrac-ng
+  </code></pre>
+</li>
+<li><p>Install pipenv: </p>
+</li>
+</ol>
+<pre><code class="lang-sh">pip install --<span class="hljs-keyword">user</span> <span class="hljs-title">pipenv</span>
+  </code></pre>
+<ol>
+<li>Create a virtual env:</li>
+</ol>
+<pre><code class="lang-sh"><span class="hljs-selector-tag">python</span> <span class="hljs-selector-tag">-m</span> <span class="hljs-selector-tag">pipenv</span> <span class="hljs-selector-tag">--python</span> 3<span class="hljs-selector-class">.9</span><span class="hljs-selector-class">.0</span>
+  </code></pre>
+<ol>
+<li>Activate the venv:</li>
+</ol>
+<pre><code class="lang-sh"><span class="hljs-keyword">python</span> -<span class="hljs-keyword">m</span> pipenv <span class="hljs-keyword">shell</span>
+  </code></pre>
+<ol>
+<li>Install the dependencies:<pre><code class="lang-sh">pip <span class="hljs-keyword">install</span> -r requirements.txt
+  </code></pre>
+</li>
+<li>Simulate findings imports / add non-merged plugins</li>
+</ol>
+<pre><code class="lang-bash"><span class="hljs-keyword">python3</span> plugin_manager.<span class="hljs-keyword">py</span> -<span class="hljs-keyword">f</span> <span class="hljs-symbol">&lt;path_to_csv_file&gt;</span>
+  </code></pre>
+<h3 id="-using-nessus2plextrac-ng">🎮 Using nessus2plextrac-ng</h3>
+<h4 id="create-a-report-client">Create a report/client</h4>
+<pre><code class="lang-sh">python3 n2p_ng.py <span class="hljs-comment">--create -t report-new -u user.name@email.com -p 'mypassword'</span>
+  &gt;&gt;&gt; Select <span class="hljs-built_in">from</span> <span class="hljs-keyword">the</span> list <span class="hljs-keyword">of</span> templates <span class="hljs-keyword">and</span> custom fields
+  &gt;&gt;&gt; Follow along <span class="hljs-keyword">with</span> <span class="hljs-keyword">the</span> prompts <span class="hljs-built_in">to</span> <span class="hljs-built_in">create</span> <span class="hljs-keyword">a</span> client/report
+  &gt;&gt;&gt; keep note <span class="hljs-keyword">of</span> client/report IDs <span class="hljs-keyword">for</span> later use (when you want <span class="hljs-built_in">to</span> <span class="hljs-built_in">add</span> data <span class="hljs-built_in">to</span> <span class="hljs-keyword">the</span> report)
+  </code></pre>
+<h4 id="simulate-findings-imports-add-non-merged-plugins">Simulate findings imports / add non-merged plugins</h4>
+<pre><code class="lang-bash"><span class="hljs-keyword">python3</span> plugin_manager.<span class="hljs-keyword">py</span> -<span class="hljs-keyword">f</span> <span class="hljs-symbol">&lt;path_to_csv_file&gt;</span>
+  </code></pre>
+<h4 id="standard-usage-with-screenshots">standard usage with screenshots</h4>
+<pre><code class="lang-sh"><span class="hljs-keyword">python3</span> n2p_ng.<span class="hljs-keyword">py</span> -<span class="hljs-keyword">u</span> user.name@email.<span class="hljs-keyword">com</span> -<span class="hljs-keyword">p</span> <span class="hljs-string">'myPassWORD'</span> -<span class="hljs-keyword">c</span> <span class="hljs-symbol">&lt;clientID&gt;</span> -r <span class="hljs-symbol">&lt;reportID&gt;</span> -s external/internal -d /path/<span class="hljs-keyword">to</span>/csv/directory -t report/report-<span class="hljs-keyword">new</span> -ss /path/<span class="hljs-keyword">to</span>/screenshots
+  </code></pre>
+<h4 id="non-core-usage-with-screenshots">Non-core usage with screenshots</h4>
+<pre><code class="lang-sh"><span class="hljs-keyword">python3</span> n2p_ng.<span class="hljs-keyword">py</span> -<span class="hljs-keyword">u</span> user.name@email.<span class="hljs-keyword">com</span> -<span class="hljs-keyword">p</span> <span class="hljs-string">'myPassWORD'</span> -<span class="hljs-keyword">c</span> <span class="hljs-symbol">&lt;clientID&gt;</span> -r <span class="hljs-symbol">&lt;reportID&gt;</span> -s external/internal -d /path/<span class="hljs-keyword">to</span>/csv/directory -t report/report-<span class="hljs-keyword">new</span> -ss /path/<span class="hljs-keyword">to</span>/screenshots -nc
+  </code></pre>
+<h4 id="standard-usage-without-screenshots">Standard usage without screenshots</h4>
+<pre><code class="lang-sh"><span class="hljs-keyword">python3</span> n2p_ng.<span class="hljs-keyword">py</span> -<span class="hljs-keyword">u</span> user.name@email.<span class="hljs-keyword">com</span> -<span class="hljs-keyword">p</span> <span class="hljs-string">'myPassWORD'</span> -<span class="hljs-keyword">c</span> <span class="hljs-symbol">&lt;clientID&gt;</span> -r <span class="hljs-symbol">&lt;reportID&gt;</span> -s external/internal -d /path/<span class="hljs-keyword">to</span>/csv/directory -t report/report-<span class="hljs-keyword">new</span>
+  </code></pre>
+<hr/>
+<h3 id="-usage-help">❓ Usage Help</h3>
+<pre><code class="lang-sh">usage: nessus2plextrac-ng.py [-h] [-u USERNAME] [-p PASSWORD] [-c CLIENT_ID]
+                               [-r REPORT_ID] [-s {internal,external}] [-d DIRECTORY]
+                               [-t {report,report-new}] [-ss SCREENSHOT_DIR] [-nc]
+                               [<span class="hljs-comment">--create]</span>
+  
+  Import Nessus scans files <span class="hljs-keyword">in</span> Plextrac <span class="hljs-keyword">while</span> regrouping findings
+  
+  optional arguments:
+    -h, <span class="hljs-comment">--help            show this help message and exit</span>
+    -u USERNAME, <span class="hljs-comment">--username USERNAME</span>
+                          User's plextrac username
+    -p PASSWORD, <span class="hljs-comment">--password PASSWORD</span>
+                          User's plextrac password
+    -c CLIENT_ID, <span class="hljs-comment">--clientID CLIENT_ID</span>
+                          Client ID <span class="hljs-keyword">in</span> plextrac
+    -r REPORT_ID, <span class="hljs-comment">--reportID REPORT_ID</span>
+                          Report ID <span class="hljs-keyword">in</span> plextrac
+    -s {internal,external}, <span class="hljs-comment">--scope {internal,external}</span>
+                          Scope/Tag <span class="hljs-keyword">to</span> add <span class="hljs-keyword">to</span> <span class="hljs-keyword">the</span> imported finding (<span class="hljs-string">"internal"</span> <span class="hljs-keyword">or</span> <span class="hljs-string">"external"</span>)
+  
+    -d DIRECTORY, <span class="hljs-comment">--directory DIRECTORY</span>
+                          Directory/Folder <span class="hljs-keyword">where</span> <span class="hljs-keyword">to</span> find <span class="hljs-keyword">the</span> Nessus CSV <span class="hljs-built_in">file</span>[s]
+    -t {report,report-new}, <span class="hljs-comment">--targettedplextrac {report,report-new}</span>
+                          Targetted server [report] <span class="hljs-keyword">or</span> [report-new]
+    -ss SCREENSHOT_DIR, <span class="hljs-comment">--screenshot_dir SCREENSHOT_DIR</span>
+                          Path <span class="hljs-keyword">to</span> <span class="hljs-keyword">the</span> directory containing <span class="hljs-keyword">the</span> screenshots
+    -nc, <span class="hljs-comment">--noncore        Add non-core custom fields to findings</span>
+    <span class="hljs-comment">--create              Prompt for client/report creation</span>
+  </code></pre>
+<hr/>
+<h2 id="-customization">🔧 Customization</h2>
+<p>Did the script not merge a finding correctly? Introducing plugin_manager.py. </p>
+<p><strong>NOTE:</strong> It is recommended to run this script before the import.</p>
+<h3 id="overview">Overview</h3>
+<p>This script serves as a plugin manager that allows you to perform various tasks such as:</p>
+<ul>
+<li>Adding plugins to categories (Temporarily)</li>
+<li>Simulating which findings will be merged and which will be individual</li>
+<li>Viewing the current changes</li>
+<li>Writing the temp changes to <code>config.json</code></li>
+<li>Clearing the temporary changes</li>
+</ul>
+<p>The script reads from a <code>config.json</code> file to obtain the current list of plugins and categories. It also reads from a user-provided CSV file to identify findings that can be merged or remain individual.</p>
+<h3 id="usage">Usage</h3>
+<p>To run the script, use the following command:</p>
+<pre><code class="lang-bash"><span class="hljs-keyword">python</span> plugin_manager.<span class="hljs-keyword">py</span> -<span class="hljs-keyword">f</span> <span class="hljs-symbol">&lt;path_to_csv_file&gt;</span>
+  </code></pre>
+<p>Replace <code>&lt;path_to_csv_file&gt;</code> with the full path to your nessus CSV file.</p>
+<h3 id="actions">Actions</h3>
+<p>Here is what each action does:</p>
+<ul>
+<li><strong>Add Plugin</strong>: Temporarily adds a plugin to a category. You will need to use 'Write Changes' to save it permanently.</li>
+<li><strong>Simulate Findings</strong>: Simulates and displays what the merged and individual findings would be based on the CSV file.</li>
+<li><strong>View Changes</strong>: Displays the current changes that have been made during this session.</li>
+<li><strong>Write Changes</strong>: Writes all the current changes to <code>config.json</code>.</li>
+<li><strong>Clear Changes</strong>: Clears all temporary changes made during this session.</li>
+<li><strong>Exit</strong>: Exits the application, providing an option to save changes if any are pending.</li>
+</ul>
+<h2 id="-troubleshooting">🐞 Troubleshooting</h2>
+<p>While this project attempts to be as clean as possible, issues will arise. Here are some troubleshooting steps.</p>
+<ol>
+<li>Remove any statefiles (.pkl) from the script directory.</li>
+<li>Pull the latest version of the project. </li>
+<li>Ensure you are using .CSV files instead of .nessus</li>
+<li>create a new client and report</li>
+<li>ensure your screenshots either were produced by NMB or are the lowercase md5 hash of the plugin name as per nessus.</li>
+<li>Re-read this README.</li>
+<li>If required; reach out to Connor Fancy with questions and provide your CSV file.</li>
+</ol>
+<hr/>
+<h2 id="faq">FAQ</h2>
+<h3 id="what-to-do-with-multiple-csv-files-">What to do with multiple CSV files?</h3>
+<p>The workflow for projects with multiple csv files should look like this: </p>
+<ol>
+<li>Don't upload findings gradually, import them all in one batch after all the scans have finished.</li>
+<li>place all the csv files into one directory</li>
+<li>place all the screenshots into one directory (yes this will overwrite but that is okay)</li>
+<li>run the script as normal</li>
+</ol>
+<h3 id="what-does-this-script-do-that-the-old-one-doesn-t-">What does this script do that the old one doesn't?</h3>
+<h4 id="additions">Additions</h4>
+<ul>
+<li>create clients/reports</li>
+<li>heavy processing is done locally rather than on plextrac's side.</li>
+<li>automatic screenshot upload</li>
+<li>addition of non-core custom fields and tags</li>
+<li>no more external/internal finding conflicts</li>
+<li>executes in a fraction of the time.</li>
+</ul>
+<h4 id="removals">Removals</h4>
+<ul>
+<li>CSV file format instead of .nessus </li>
+<li>No longer "fixes" existing findings in plextrac, the idea is that everything can be done in one fresh execution.<ul>
+<li>meaning if you have a finding in plextrac with 50 assets and then upload another csv over it, it will not add assets to that existing finding, instead it will create a new finding since all flawIDs are now random.</li>
+</ul>
+</li>
+</ul>
+<h3 id="is-this-script-different-than-nmb-">Is this script different than NMB?</h3>
+<p>Yes, this script is used to import results from nessus scans not verify or execute them. The flow is like this:</p>
+<ol>
+<li>use nmb to launch nessus scans </li>
+<li>use nmb to export nessus scan results</li>
+<li>use nmb to verify nessus findings and gather automatic screenshots</li>
+<li>use nessus2plextrac-ng to create a client/report in plextrac</li>
+<li>use nessus2plextrac-ng to import nessus results and screenshots gathered by NMB</li>
+<li>touch up the report as needed and don't forget to crop screenshots after exporting</li>
+</ol>
+<h2 id="-roadmap">🗺 Roadmap</h2>
+<blockquote>
+<ul>
+<li>[ ] <code>ℹ️  Task 1: Migrate away from pyinquier</code></li>
+<li>[ ] <code>ℹ️  Task 2: Create .ptrac file instead of csv for import (easier to import screenshots)</code></li>
+</ul>
+</blockquote>
+<hr/>
+<h2 id="-acknowledgments">👏 Acknowledgments</h2>
+<blockquote>
+<ul>
+<li><code>ℹ️  https://github.com/rouxn-bsi/reporting-toolset/tree/main/Nessus2Plextrac</code></li>
+</ul>
+</blockquote>
+<hr/>

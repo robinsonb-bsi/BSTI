@@ -24,15 +24,21 @@ Bulletproof Solutions Testing Interface
     - [Debian based OS](#debian-based-os)
   - [💻 Installation](#-installation)
 - [🎮 Using BSTI](#-using-bsti)
-  - [Connecting](#connecting)
+  - [First Steps and Connecting](#first-steps-and-connecting)
+  - [Understanding the Interface](#understanding-the-interface)
   - [Home Tab](#home-tab)
   - [Module Editor](#module-editor)
-  - [File Transfer](#file-transfer)
   - [View Logs](#view-logs)
   - [Modules](#modules)
     - [JSON Format](#json-format)
-    - [Argument Metadata Comments](#argument-metadata-comments)
-    - [File Upload Metadata Comments](#file-upload-metadata-comments)
+    - [Argument Metadata](#argument-metadata)
+    - [File Upload Metadata](#file-upload-metadata)
+    - [Nessus Mapping Metadata](#nessus-mapping-metadata)
+    - [Tmux For Interactive Commands](#tmux-for-interactive-commands)
+- [Integrations](#integrations)
+    - [Nessus2Plextrac-ng](#nessus2plextrac-ng)
+    - [NMB](#nmb)
+    - [File Viewer](#file-viewer)
 - [Contributing to BSTI](#contributing-to-bsti)
 
 ---
@@ -249,7 +255,7 @@ You can also access the terminal of your active BSTI from the same menu.
 BSTI is designed to be a complete solution, the tester should be able to perform most of their assessment from the application, and whatever they can't do - they can build within BSTI.
 
 #### Nessus2Plextrac-ng
-To use n2p-ng within BSTI, you need to ensure you installed the dependcies (mostly everyone should already have this installed)
+To use n2p-ng within BSTI, you need to ensure you installed the depends (mostly everyone should already have this installed)
 The functionality is the same, just slightly different since there is no interactive terminal within BSTG. 
 
 From the 'Reports' menu, you can select from all the functionality n2p-ng has to offer:
@@ -275,7 +281,7 @@ You can 'pause' the execution of NMB's finding validation (internal/external mod
 #### File Viewer
 BSTI can render html, csv and json files from clicking 'File' in the top left of the menu bar.
 
-You can open up summaries from NMB or Intrepreter as shown below:
+You can open up summaries from NMB or Interpreter as shown below:
 
 ![image](https://github.com/fancyc-bsi/BSTI/assets/85493503/557902bf-2b9a-4501-90bb-bc782f5a2705)
 
