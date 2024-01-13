@@ -32,4 +32,6 @@ sudo sed -i '/^mibs :/s/^/#/' /etc/snmp/snmp.conf
 # Update Metasploit
 sudo apt install -y metasploit-framework
 
+python3 -m pip install mitm6
+
 echo "Setup complete."
