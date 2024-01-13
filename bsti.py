@@ -2265,28 +2265,35 @@ class MainWindow(QMainWindow):
                     quality=100
                 )
 
-            screenshot_dir = "screenshots"
-
-            os.makedirs(screenshot_dir, exist_ok=True)
-
-            session_name = self.log_sessions_combo.currentText()
-            nessus_finding_name = self.nessus_findings_map.get(session_name)
-
+            default_filename = "screenshot.png"
             if nessus_finding_name:
-                filename = hashlib.md5(nessus_finding_name.encode()).hexdigest() + ".png"
+                default_filename = nessus_finding_name + ".png"
             else:
-                # Default filename logic
-                filename = f"{session_name}.png"
+                session_name = self.log_sessions_combo.currentText()
+                nessus_finding_name = self.nessus_findings_map.get(session_name)
+                if nessus_finding_name:
+                    default_filename = hashlib.md5(nessus_finding_name.encode()).hexdigest() + ".png"
+                else:
+                    default_filename = f"{session_name}.png"
 
-            output_path = os.path.join("screenshots", filename)
+            # Ask user to select save location
+            options = QFileDialog.Options()
+            options |= QFileDialog.DontUseNativeDialog
+            save_path, _ = QFileDialog.getSaveFileName(self, "Save Screenshot", default_filename, "PNG Files (*.png)", options=options)
 
-            # Save the screenshot
-            shot.create_pic(html=html_content, css=css, output=output_path)
-            QMessageBox.information(self, "Screenshot Saved", f"Screenshot saved as {output_path}")
+            if save_path:  # Check if a path was selected
+                output_path = save_path if save_path.endswith('.png') else save_path + '.png'
+
+                # Save the screenshot
+                shot.create_pic(html=html_content, css=css, output=output_path)
+                QMessageBox.information(self, "Screenshot Saved", f"Screenshot saved as {output_path}")
+            else:
+                QMessageBox.information(self, "Cancelled", "Screenshot save cancelled.")
+
             self.nessus_findings_map.pop(session_name, None)
-        
-        except Exception:
-            QMessageBox.information(self, "Error", "Unable to capture screenshot")
+
+        except Exception as e:
+            QMessageBox.information(self, "Error", f"Unable to capture screenshot: {e}")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
