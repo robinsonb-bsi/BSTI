@@ -33,5 +33,6 @@ sudo sed -i '/^mibs :/s/^/#/' /etc/snmp/snmp.conf
 sudo apt install -y metasploit-framework
 
 python3 -m pip install mitm6
+python3 -m pip install httpx
 
 echo "Setup complete."
