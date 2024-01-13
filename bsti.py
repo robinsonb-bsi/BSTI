@@ -2171,16 +2171,20 @@ class MainWindow(QMainWindow):
                 return
 
             if selected_module.endswith(('.py', '.sh')):
-                args_dialog = CommandLineArgsDialog(module_path, host, username, password, self)
+                args = ""
                 nessus_finding_name = None
+                file_paths = []
+
+                args_dialog = CommandLineArgsDialog(module_path, host, username, password, self)
                 if args_dialog.has_arguments():
                     if args_dialog.exec_() == QDialog.Accepted:
                         args, file_paths, nessus_finding_name = args_dialog.get_arguments()
                         if nessus_finding_name:
                             nessus_finding_name = nessus_finding_name.strip('# ').lower()
 
-                full_command = (f"{module_path} {args}", file_paths)
+                full_command = (f"{module_path} {args}".strip(), file_paths)
                 self.add_ssh_tab(host, username, password, full_command, is_script_path=True, nessus_finding_name=nessus_finding_name)
+
         except Exception:
             pass # catch all since errors are not handled here
 
