@@ -897,7 +897,7 @@ class CustomTableWidget(QTableWidget):
 
     def contextMenuEvent(self, event):
         menu = QMenu(self)
-        gatherAction = menu.addAction("Gather Similar Findings")
+        gatherAction = menu.addAction("Extract hosts")
         action = menu.exec_(self.mapToGlobal(event.pos()))
         if action == gatherAction:
             self.gatherFindings()
