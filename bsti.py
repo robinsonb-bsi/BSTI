@@ -30,11 +30,10 @@ warnings.filterwarnings("ignore", category=DeprecationWarning,
 # TODO 
 """
 organize code :(
-parser for csv built-in
-setup project folder per session
 fix halo spinner on n2p and nmb
 
 # Done
+parser for csv built-in
 home page diagnostics -> move file transfer tab?
 metadata for modules to map to nessus findings, then convert to md5 when saving the screenshot
 pause button for nmb
