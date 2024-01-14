@@ -5,7 +5,7 @@
 import sys
 import os
 import pandas as pd
-from PyQt5.QtWidgets import (QApplication, QInputDialog, QDialogButtonBox, QTableWidget, QTableWidgetItem, QCheckBox, QLabel, QAction, QTabBar, QStyle, QPlainTextEdit, QMainWindow, QGridLayout, QHBoxLayout, QTabWidget, QTextEdit, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QDialog, QLineEdit, QFormLayout, QMessageBox, QComboBox)
+from PyQt5.QtWidgets import (QApplication, QMenu, QInputDialog, QDialogButtonBox, QTableWidget, QTableWidgetItem, QCheckBox, QLabel, QAction, QTabBar, QStyle, QPlainTextEdit, QMainWindow, QGridLayout, QHBoxLayout, QTabWidget, QTextEdit, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QDialog, QLineEdit, QFormLayout, QMessageBox, QComboBox)
 from PyQt5.QtCore import QThread, pyqtSignal, QUrl, QRegExp, Qt, QProcess
 from PyQt5.QtGui import QTextCursor, QFont, QSyntaxHighlighter, QTextCharFormat, QColor, QDesktopServices
 from PyQt5.QtWebKitWidgets import QWebView
@@ -881,6 +881,45 @@ class CredentialsDialog(QDialog):
     def getCredentials(self):
         return self.usernameLineEdit.text(), self.passwordLineEdit.text()
 
+class CustomTableWidget(QTableWidget):
+    gatherFindingsSignal = pyqtSignal(str)
+    def __init__(self, parent=None, dataframe=None):
+        super().__init__(parent)
+        self.dataframe = dataframe
+        self.setupTable()
+
+    def setupTable(self):
+        if self.dataframe is not None:
+            self.setColumnCount(self.dataframe.shape[1])
+            self.setHorizontalHeaderLabels(self.dataframe.columns)
+        self.setSelectionBehavior(QTableWidget.SelectRows)
+        self.setSelectionMode(QTableWidget.SingleSelection)
+
+    def contextMenuEvent(self, event):
+        menu = QMenu(self)
+        gatherAction = menu.addAction("Gather Similar Findings")
+        action = menu.exec_(self.mapToGlobal(event.pos()))
+        if action == gatherAction:
+            self.gatherFindings()
+
+    def gatherFindings(self):
+        selected_row = self.currentRow()
+        if selected_row < 0:
+            return  # No row selected
+        finding_name_column = self.columnIndex("Name")
+        if finding_name_column < 0:
+            QMessageBox.warning(self, "Error", "Finding Name column not found.")
+            return
+        finding_name = self.item(selected_row, finding_name_column).text()
+        self.gatherFindingsSignal.emit(finding_name)
+
+    def columnIndex(self, column_name):
+        for i in range(self.columnCount()):
+            if self.horizontalHeaderItem(i).text() == column_name:
+                return i
+        return -1
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -889,6 +928,7 @@ class MainWindow(QMainWindow):
         self.nessus_finding_name = None
         self.socks_ssh_process = None
         self.portforward_ssh_process = None
+        self.df = None
         self.nessus_findings_map = {}
         self.setWindowTitle("Bulletproof Solutions Testing Interface")
         self.setGeometry(100, 100, 2200, 1200)
@@ -1210,10 +1250,13 @@ class MainWindow(QMainWindow):
 
             # Check file extension and render content accordingly
             if file_name.lower().endswith('.csv'):
-                # Use pandas to read CSV and display in a QTableWidget
                 df = pd.read_csv(file_name)
-                table = self.create_table_from_dataframe(df)
-                layout.addWidget(table)
+                self.df = df
+                if self.is_nessus_csv(df):
+                    self.parse_nessus_csv(df, layout)
+                else:
+                    table = self.create_table_from_dataframe(df)
+                    layout.addWidget(table)
             elif file_name.lower().endswith('.json'):
                 # Display JSON in a QTextEdit with pretty formatting
                 with open(file_name, 'r') as file:
@@ -1251,6 +1294,45 @@ class MainWindow(QMainWindow):
 
             self.tab_widget.tabBar().setTabButton(self.tab_widget.indexOf(tab), QTabBar.RightSide, close_button)
         
+    def is_nessus_csv(self, dataframe):
+        # Check if the CSV is a Nessus file (by looking for specific column names)
+        nessus_columns = ['Plugin ID', 'CVE', 'Risk', 'Host', 'Description']
+        return any(column in dataframe.columns for column in nessus_columns)
+
+    def parse_nessus_csv(self, dataframe, layout):
+        self.nessus_table = CustomTableWidget(self, dataframe)
+        self.nessus_table.gatherFindingsSignal.connect(self.gatherSimilarFindings)
+        layout.addWidget(self.nessus_table)
+
+        risk_filter = QComboBox()
+        risk_filter.addItems(['All', 'Critical', 'High', 'Medium', 'Low', 'Informational'])
+        risk_filter.currentTextChanged.connect(lambda: self.apply_nessus_filter(dataframe, risk_filter.currentText()))
+        layout.addWidget(risk_filter)
+
+        self.populate_table(self.nessus_table, dataframe)
+
+    def apply_nessus_filter(self, dataframe, risk_level):
+        # Normalize and filter the dataframe
+        normalized_risk = dataframe['Risk'].str.lower().str.strip()
+        if risk_level.lower() != 'all':
+            filtered_df = dataframe[normalized_risk == risk_level.lower()]
+        else:
+            filtered_df = dataframe
+
+        self.populate_table(self.nessus_table, filtered_df)
+
+    def populate_table(self, table, dataframe):
+        # Set row count
+        table.setRowCount(dataframe.shape[0])
+
+        # Populate the table
+        for i, (index, row) in enumerate(dataframe.iterrows()):
+            for j, value in enumerate(row):
+                item = QTableWidgetItem(str(value))
+                table.setItem(i, j, item)
+
+        table.resizeColumnsToContents()
+
     def create_table_from_dataframe(self, df):
         table = QTableWidget()
         table.setRowCount(df.shape[0])
@@ -1265,6 +1347,26 @@ class MainWindow(QMainWindow):
         return table
     
 
+    def gatherSimilarFindings(self, finding_name):
+        similar_findings = self.df[self.df['Name'] == finding_name]
+        hosts = similar_findings['Host'].unique()
+
+        # Suggest a default file name
+        suggested_filename = f'{finding_name}_targets.txt'
+
+        options = QFileDialog.Options()
+        file_path, _ = QFileDialog.getSaveFileName(self, "Save File", suggested_filename, "Text Files (*.txt)", options=options)
+
+        # Check if the user provided a file path
+        if file_path:
+            with open(file_path, 'w') as file:
+                for host in hosts:
+                    file.write(host + '\n')
+            QMessageBox.information(self, "Findings Gathered", f"Similar findings have been gathered into {file_path}.")
+        else:
+            QMessageBox.warning(self, "File Save Cancelled", "The operation was cancelled and no file was saved.")
+        
+    
     def save_module(self):
         if not self.current_module_path or not self.temp_file:
             QMessageBox.warning(self, "Error", "No module loaded.")
