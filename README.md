@@ -47,7 +47,7 @@ Bulletproof Solutions Testing Interface
 ## 📍 Overview
 
 ### Features
-
+TODO
 
 ---
 
@@ -94,6 +94,8 @@ python bsti.py
 ### First Steps and Connecting
 To connect to a BSTG, click "Config" in the top-left corner, then "Configure new BSTG" and enter the login details.  
 If you've already connected to that BSTG with BSTI before, it'll show up in the bottom left corner. You can change this on the fly by clicking in that space and selecting another BSTG from the dropdown menu.
+
+Saved details for a BSTG will be written to .config/drones.json - this will not be encrypted unless there is a demand for it, hopefully someday we wil go to key-based authentication only.
 
 The dropdown menu is very important now, the BSTG mentioned in that box will be your "Active BSTG" and a lot of the functionality built within this app relies on that active connection. Ensure you are using the correct BSTG.
 
@@ -251,8 +253,19 @@ BSTI will then search for active tmux sessions on your active BSTG, you can clic
 
 You can also access the terminal of your active BSTI from the same menu.
 
+#### Terminal Menu
+As mentioned above, you can start an ssh session with the active BSTG by clicking the "Open Terminal" menu option, from here you can run commands on the BSTG as you normally would.
+
+Additionally, you can start/stop both a socks proxy and a local port forward from this menu, as shown here:
+
+![image](https://github.com/fancyc-bsi/BSTI/assets/85493503/525e7477-d93d-41d8-8b7f-907655dd4bbe)
+
+
+
 ## Integrations
 BSTI is designed to be a complete solution, the tester should be able to perform most of their assessment from the application, and whatever they can't do - they can build within BSTI.
+
+BSTI includes custom version of both NMB and nessus2plextrac-ng, the original versions can still be found in their current location - for now.
 
 #### Nessus2Plextrac-ng
 To use n2p-ng within BSTI, you need to ensure you installed the depends (mostly everyone should already have this installed)
@@ -289,7 +302,10 @@ Or, you can open a csv file in a 'grid-like' format:
 
 ![image](https://github.com/fancyc-bsi/BSTI/assets/85493503/e9227393-5e33-477b-a4fe-75d7c3078f54)
 
-Parsing the csv file and providing filters is on the to-do list but is not yet added.
+You can apply filters by severity rating by using the bottom dropdown bar. Additionally, you can right click a finding to find all intances of it and create a target.txt based on all the gathered hosts:
+
+![image](https://github.com/fancyc-bsi/BSTI/assets/85493503/09ee63b8-b5c8-4030-bb70-71eb8b57c0b4)
+
 
 
 ## Contributing to BSTI
