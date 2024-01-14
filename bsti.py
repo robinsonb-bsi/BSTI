@@ -887,6 +887,8 @@ class MainWindow(QMainWindow):
         self.current_module_path = None
         self.temp_file = None
         self.nessus_finding_name = None
+        self.socks_ssh_process = None
+        self.portforward_ssh_process = None
         self.nessus_findings_map = {}
         self.setWindowTitle("Bulletproof Solutions Testing Interface")
         self.setGeometry(100, 100, 2200, 1200)
@@ -939,6 +941,26 @@ class MainWindow(QMainWindow):
         self.connect_tmux_action = QAction("Connect to Tmux Session", self)
         self.connect_tmux_action.triggered.connect(self.on_connect_tmux_triggered)
         self.terminal_menu.addAction(self.connect_tmux_action)
+
+        # Socks proxy setup
+        self.connect_to_socks_action = QAction("Start SOCKS Proxy", self)
+        self.connect_to_socks_action.triggered.connect(self.open_socks_ssh)
+        self.terminal_menu.addAction(self.connect_to_socks_action)
+
+        # Local port forward setup
+        self.connect_to_portforward_action = QAction("Start Local Port Forward", self)
+        self.connect_to_portforward_action.triggered.connect(self.open_portforward_ssh)
+        self.terminal_menu.addAction(self.connect_to_portforward_action)
+
+        # Stop SOCKS proxy setup
+        self.stop_socks_proxy_action = QAction("Stop SOCKS Proxy", self)
+        self.stop_socks_proxy_action.triggered.connect(self.stop_socks_proxy)
+        self.terminal_menu.addAction(self.stop_socks_proxy_action)
+
+        # Stop Local port forward setup
+        self.stop_portforward_action = QAction("Stop Local Port Forward", self)
+        self.stop_portforward_action.triggered.connect(self.stop_portforward)
+        self.terminal_menu.addAction(self.stop_portforward_action)
 
         # Reporting menu - n2p
         self.report_menu = self.menu_bar.addMenu("Reports")
@@ -1688,6 +1710,91 @@ class MainWindow(QMainWindow):
             subprocess.run(terminal_command, shell=True)
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to open terminal: {e}")
+
+    def open_socks_ssh(self):
+        drone_id = self.drone_selector.currentText()
+        if not drone_id:
+            QMessageBox.warning(self, "No Drone Selected", "Please select a drone first.")
+            return
+
+        host, username, password = self.get_current_drone_connection()
+        if not host:
+            QMessageBox.warning(self, "No Host Found", "The selected drone does not have a valid host address.")
+            return
+
+        port, ok = QInputDialog.getText(self, "Enter Port", "Enter SOCKS Proxy Port:")
+        if not ok or not port.isdigit():
+            QMessageBox.warning(self, "No Port Provided", "You must provide a valid port number.")
+            return
+
+        terminal_command = self.construct_ssh_command(host, username, f"-D {port}")
+        self.execute_terminal_command(terminal_command, "socks")
+
+    def open_portforward_ssh(self):
+        drone_id = self.drone_selector.currentText()
+        if not drone_id:
+            QMessageBox.warning(self, "No Drone Selected", "Please select a drone first.")
+            return
+
+        host, username, password = self.get_current_drone_connection()
+        if not host:
+            QMessageBox.warning(self, "No Host Found", "The selected drone does not have a valid host address.")
+            return
+
+        port, ok = QInputDialog.getText(self, "Enter Port", "Enter Port Forwarding Port:")
+        if not ok or not port.isdigit():
+            QMessageBox.warning(self, "No Port Provided", "You must provide a valid port number.")
+            return
+
+        terminal_command = self.construct_ssh_command(host, username, f"-L {port}:localhost:{port}")
+        self.execute_terminal_command(terminal_command, "portforward")
+
+
+    def construct_ssh_command(self, host, username, options):
+        return ["ssh", f"{options}", "-N", f"{username}@{host}"]
+
+    def execute_terminal_command(self, terminal_command, tunnel_type):
+        if terminal_command is None:
+            return
+
+        process = QProcess(self)
+        process.setProcessChannelMode(QProcess.MergedChannels)
+        process.started.connect(self.on_process_started)
+        process.finished.connect(lambda exitCode, exitStatus: self.on_process_finished(exitCode, exitStatus, process))
+
+        try:
+            process.start(terminal_command[0], terminal_command[1:])
+            if tunnel_type == "socks":
+                self.socks_ssh_process = process
+            elif tunnel_type == "portforward":
+                self.portforward_ssh_process = process
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to start process: {e}")
+
+    def on_process_started(self):
+        QMessageBox.information(self, "SSH Tunnel", "SSH tunnel is now established...")
+
+    def on_process_finished(self, exitCode, exitStatus, process):
+        output = process.readAll().data().decode()
+        if exitCode == 0:
+            QMessageBox.information(self, "SSH Tunnel", "SSH tunnel closed.")
+        else:
+            QMessageBox.warning(self, "SSH Tunnel", f"SSH tunnel closed unexpectedly: {output}")
+
+    def stop_socks_proxy(self):
+        if self.socks_ssh_process and self.socks_ssh_process.state() != QProcess.NotRunning:
+            self.socks_ssh_process.kill()
+            QMessageBox.information(self, "SOCKS Proxy", "SOCKS proxy has been stopped.")
+        else:
+            QMessageBox.information(self, "SOCKS Proxy", "No active SOCKS proxy to stop.")
+
+    def stop_portforward(self):
+        if self.portforward_ssh_process and self.portforward_ssh_process.state() != QProcess.NotRunning:
+            self.portforward_ssh_process.kill()
+            QMessageBox.information(self, "Port Forward", "Local port forward has been stopped.")
+        else:
+            QMessageBox.information(self, "Port Forward", "No active local port forward to stop.")
+
 
     def create_module(self):
         modules_dir = "modules"
