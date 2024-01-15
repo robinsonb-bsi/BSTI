@@ -107,6 +107,8 @@ pip install -r requirements.txt
 
 python bsti.py
 ```
+**Note:** BSTI has only been tested on window, macOS users are encouraged to report bugs or issues when found.
+
 ### First Steps and Connecting
 To connect to a BSTG, click "Config" in the top-left corner, then "Configure new BSTG" and enter the login details.  
 If you've already connected to that BSTG with BSTI before, it'll show up in the bottom left corner. You can change this on the fly by clicking in that space and selecting another BSTG from the dropdown menu.
