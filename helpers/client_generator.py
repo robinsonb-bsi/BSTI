@@ -196,6 +196,14 @@ class ClientReportGen:
         print("Report Name: ", report_name)
         print("-" * 50)
 
+        output_file_path = "report_info.txt" 
+        self.write_output_to_file(output_file_path, client_id, report_id)
+
+    def write_output_to_file(self, file_path: str, client_id: str, report_id: str):
+        """Writes the client and report IDs to a specified file."""
+        with open(file_path, 'w') as file:
+            file.write(f"Client ID: {client_id}\n")
+            file.write(f"Report ID: {report_id}\n")
 
     def create_report(self, report_name: str, client_id: str, report_template: str, custom_field_template: str) -> Union[str, None]:
         """Creates a new report.

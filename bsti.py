@@ -24,6 +24,7 @@ import hashlib
 import warnings
 import shlex
 import autopep8
+import time
 warnings.filterwarnings("ignore", category=DeprecationWarning, 
                         message=".*sipPyTypeDict.*") # hushes annoying errors for now temp solution
 
@@ -707,7 +708,7 @@ class NMBRunnerThread(QThread):
             self.process.send_signal(signal.SIGINT)
 
 class N2PArgsDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, default_client_id="", default_report_id=""):
         super(N2PArgsDialog, self).__init__(parent)
         self.layout = QVBoxLayout(self)
         self.layout.setSpacing(10)
@@ -719,6 +720,10 @@ class N2PArgsDialog(QDialog):
         self.password_edit.setEchoMode(QLineEdit.Password)
         self.client_id_edit = QLineEdit(self)
         self.report_id_edit = QLineEdit(self)
+
+        self.client_id_edit.setText(default_client_id)
+        self.report_id_edit.setText(default_report_id)
+
         self.scope_edit = QComboBox(self)
         self.scope_edit.addItems(["", "internal", "external"])
 
@@ -899,6 +904,8 @@ class MainWindow(QMainWindow):
         self.socks_ssh_process = None
         self.portforward_ssh_process = None
         self.df = None
+        self.client_id = None
+        self.report_id = None
         self.nessus_findings_map = {}
         self.setWindowTitle("Bulletproof Solutions Testing Interface")
         self.setGeometry(100, 100, 2200, 1200)
@@ -1132,13 +1139,27 @@ class MainWindow(QMainWindow):
             try:
                 if sys.platform == "win32":
                     # For Windows, modify the command to keep PowerShell open
-                    powershell_command = f'start powershell -Command "{command}; Read-Host -Prompt \'MAKE SURE YOU COPY THE REPORT AND CLIENT ID - Press Enter to exit\'"'
+                    powershell_command = f'start powershell -Command "{command}; Read-Host -Prompt \'Press Enter to exit\'"'
                     subprocess.Popen(powershell_command, shell=True)
                 else:
-                    # For Unix/Linux
+                    # For Unix/Linux, open a new terminal window
                     subprocess.Popen(['gnome-terminal', '--', 'bash', '-c', command])
+
             except Exception as e:
                 QMessageBox.warning(self, "Error", f"Failed to execute the command: {e}")
+
+    def parse_output(self, output):
+        # Regular expressions to find Client ID and Report ID
+        client_id_pattern = r"Client ID: (\S+)"
+        report_id_pattern = r"Report ID: (\S+)"
+
+        client_id_match = re.search(client_id_pattern, output)
+        report_id_match = re.search(report_id_pattern, output)
+
+        client_id = client_id_match.group(1) if client_id_match else ""
+        report_id = report_id_match.group(1) if report_id_match else ""
+
+        return client_id, report_id
 
     def apply_autopep8(self):
         try:
@@ -1168,8 +1189,20 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Error", f"Failed to execute the command: {e}")
 
     def report_findings_execution(self):
-        # Open the dialog to get arguments
-        args_dialog = N2PArgsDialog(self)
+        # Open the dialog to get arguments, pre-filling client and report ID
+        report_file = "report_info.txt"
+        if os.path.exists(report_file):
+            with open(report_file, "r") as file:
+                output = file.read()
+
+            # Parse output for Client ID and Report ID
+            client_id, report_id = self.parse_output(output)
+            self.client_id = client_id
+            self.report_id = report_id
+            QMessageBox.information(self, "Information", 
+                            f"Client ID ({self.client_id}) and Report ID ({self.report_id}) have been pre-filled based on your latest report generation.")
+            
+        args_dialog = N2PArgsDialog(parent=self, default_client_id=self.client_id, default_report_id=self.report_id)
         if args_dialog.exec_() == QDialog.Accepted:
             args = args_dialog.get_arguments()
 
@@ -1179,7 +1212,7 @@ class MainWindow(QMainWindow):
                 if arg != 'noncore' and value:
                     command.extend([f"--{arg}", value])
 
-            # Check and append the --noncore argument separately since its the only unique one
+            # Check and append the --noncore argument separately
             if args['noncore']:
                 command.append('--noncore')
 
