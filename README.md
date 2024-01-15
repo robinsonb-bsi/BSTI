@@ -113,7 +113,7 @@ python bsti.py
 To connect to a BSTG, click "Config" in the top-left corner, then "Configure new BSTG" and enter the login details.  
 If you've already connected to that BSTG with BSTI before, it'll show up in the bottom left corner. You can change this on the fly by clicking in that space and selecting another BSTG from the dropdown menu.
 
-Saved details for a BSTG will be written to .config/drones.json - this will not be encrypted unless there is a demand for it, hopefully someday we wil go to key-based authentication only.
+Saved details for a BSTG will be written to .config/drones.json - this will not be encrypted unless there is a demand for it, hopefully someday we will go to key-based authentication only.
 
 The dropdown menu is very important now, the BSTG mentioned in that box will be your "Active BSTG" and a lot of the functionality built within this app relies on that active connection. Ensure you are using the correct BSTG.
 
