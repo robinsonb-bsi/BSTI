@@ -134,7 +134,7 @@ class Interpreter:
         html_content = """
         <html>
         <head>
-            <title>Interpreter (v0.2)</title>
+            <title>Interpreter (v1)</title>
             <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css">
             <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
             <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
@@ -152,7 +152,7 @@ class Interpreter:
                     padding: 0;
                 }
                 .container {
-                    max-width: 800px;
+                    max-width: 1200px;
                     margin: 0 auto;
                     padding: 20px;
                 }
@@ -249,7 +249,7 @@ class Interpreter:
         </head>
         <body>
             <div class="container">
-                <h1>Interpreter (v0.2) aka Nessus2HTML</h1>
+                <h1>Interpreter</h1>
                 <button id='expandAll' onclick='expandAllSections()'>Expand All</button>
                 <button id='collapseAll' onclick='collapseAllSections()'>Collapse All</button>
         """
