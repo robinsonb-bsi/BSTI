@@ -1,4 +1,4 @@
-paramiko==3.0.0
+paramiko==3.4.0
 PyQt5==5.15.2
 htmlwebshot==0.1.2
 scp==0.14.5
