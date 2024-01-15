@@ -283,7 +283,7 @@ Additionally, you can start/stop both a socks proxy and a local port forward fro
 ## Integrations
 BSTI is designed to be a complete solution, the tester should be able to perform most of their assessment from the application, and whatever they can't do - they can build within BSTI.
 
-BSTI includes custom version of both NMB and nessus2plextrac-ng, the original versions can still be found in their current location - for now.
+BSTI includes custom version of both NMB and nessus2plextrac-ng with minimal dependencies (no more python3.9 requirements), the original versions can still be found in their current location - for now.
 
 #### Nessus2Plextrac-ng
 To use n2p-ng within BSTI, you need to ensure you installed the depends (mostly everyone should already have this installed)
