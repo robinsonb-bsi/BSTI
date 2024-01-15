@@ -16,3 +16,4 @@ __pycache__
 *.pkl
 !docs.html
 !assets/*
+demo-ssl-nmap.sh

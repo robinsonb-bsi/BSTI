@@ -13,3 +13,4 @@ filelock==3.12.2
 pretty-errors==1.2.25
 openpyxl==3.1.2
 bs4==0.0.1
+autopep8==2.0.4

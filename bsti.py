@@ -23,6 +23,7 @@ import signal
 import hashlib
 import warnings
 import shlex
+import autopep8
 warnings.filterwarnings("ignore", category=DeprecationWarning, 
                         message=".*sipPyTypeDict.*") # hushes annoying errors for now temp solution
 
@@ -1020,6 +1021,11 @@ class MainWindow(QMainWindow):
         self.module_editor_layout.addWidget(self.save_button)
         self.tab_widget.addTab(self.module_editor_tab, "Module Editor")
 
+        # Add Lint button
+        self.lint_button = QPushButton("Lint")
+        self.lint_button.clicked.connect(self.apply_autopep8)
+        self.module_editor_layout.addWidget(self.lint_button)
+
         # Module selection layout
         self.moduleSelectionLayout = QHBoxLayout()
         self.module_label = QLabel("Choose a module to run:")
@@ -1133,6 +1139,15 @@ class MainWindow(QMainWindow):
                     subprocess.Popen(['gnome-terminal', '--', 'bash', '-c', command])
             except Exception as e:
                 QMessageBox.warning(self, "Error", f"Failed to execute the command: {e}")
+
+    def apply_autopep8(self):
+        try:
+            current_code = self.module_editor.toPlainText()
+            formatted_code = autopep8.fix_code(current_code)
+            self.module_editor.setPlainText(formatted_code)
+            QMessageBox.information(self, "autopep8", "Formatting applied successfully.")
+        except Exception as e:
+            QMessageBox.warning(self, "autopep8", f"An error occurred: {e}")
 
 
     def run_plugin_manager(self):
