@@ -24,7 +24,6 @@ import hashlib
 import warnings
 import shlex
 import autopep8
-import time
 warnings.filterwarnings("ignore", category=DeprecationWarning, 
                         message=".*sipPyTypeDict.*") # hushes annoying errors for now temp solution
 
