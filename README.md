@@ -56,7 +56,7 @@ TODO
 
 ### ✔️ Prerequisites
 
-**Very important that Python3.9 is installed.**
+python3.x
 
 To take screenshots, wkhtmltopdf is required:
 
