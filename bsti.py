@@ -1,5 +1,5 @@
 # BSTI
-# version: 0.1
+# version: 1.0
 # Authors: Connor Fancy
 
 import sys
@@ -26,35 +26,6 @@ import shlex
 warnings.filterwarnings("ignore", category=DeprecationWarning, 
                         message=".*sipPyTypeDict.*") # hushes annoying errors for now temp solution
 
-
-# TODO 
-"""
-organize code :(
-
-# Done
-parser for csv built-in
-home page diagnostics -> move file transfer tab?
-metadata for modules to map to nessus findings, then convert to md5 when saving the screenshot
-pause button for nmb
-open NMB json for editing
-render html, csv results from NMB/interpreter 
-temp file creating when module is edited, that is executed for temp changes
-Integration with nmb 
-rework NMB to not prompt user for interactive input (csv and txt files)
-fix underscore description requirement
-create readme and dev guide
-file transfer metadata 
-screenshots of logs
-improve homepage for links
-make ui more clean and readable
-prevent module editor or home from closing 
-json payloads for multi windows
-logging all output into session log logs/session_identifier/BSTI.log
-allow for arguments in modules 
-parse arguments and prompt user based on how many
-create module file
-terminal rework
-"""
 
 STYLESHEET_FOR_TEXTEDIT = """
     QTextEdit {
