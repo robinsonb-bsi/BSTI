@@ -297,7 +297,10 @@ From the 'Reports' menu, you can select from all the functionality n2p-ng has to
 
 Selecting 'plugin manager' or 'Create report' will open an interactive local terminal session (powershell or gnome-termninal). These behave just like the command line you are already used to. 
 
-Ensure you keep note of the clientID and reportID when creating a report, before closing the process window (or pressing enter at the final prompt).
+After you create a report, the client and report ID will both be written to a file, this will pre-fill the values when you attempt to import the findings into plextrac:
+
+![image](https://github.com/fancyc-bsi/BSTI/assets/85493503/50933a13-84c9-4d39-8701-7d0c8865fe9c)
+
 
 #### NMB 
 BSTI also includes NMB integration - you can control all the usual functionality from the UI.
