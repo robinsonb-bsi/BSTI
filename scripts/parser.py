@@ -26,7 +26,6 @@ class ConfigParser:
             log.warning("'NMB_config.json' not found - generating it for you this will take awhile ...")
             GenConfig()
             log.success("NMB_config.json finished generating")
-        # self.check_and_regenerate_config()
 
     def _get_last_modified_time(self):
         """
@@ -36,23 +35,6 @@ class ConfigParser:
         - Last modified time of the 'config.json' file in seconds since the epoch.
         """
         return os.path.getmtime(self.json_config)
-
-    # currently not used as users are managing their own config.json
-    # def check_and_regenerate_config(self):
-    #     """
-    #     Check if 'config.json' has not been updated in 1 week and regenerate it if needed.
-    #     """
-    #     one_week = 7 * 24 * 60 * 60  # 1 week in seconds
-
-    #     last_modified_time = self._get_last_modified_time()
-    #     current_time = time.time()
-
-    #     if (current_time - last_modified_time) >= one_week:
-    #         log.warning("'config.json' not up to date - regenerating it...")
-    #         GenConfig()
-    #         log.success("config.json regenerated successfully.")
-    #     else:
-    #         log.success("'config.json' is up to date. No regeneration needed.")
 
     def gather_data(self):
         """

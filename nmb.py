@@ -320,8 +320,8 @@ def parse_arguments():
     parser.add_argument("-ex", "--external", dest="external", required=False, action="store_const", const=True, help="Enable external mode")
     parser.add_argument("-l", "--local", dest="local", required=False, action="store_const", const=True, help="run manual checks on your local machine instead of over ssh")
     parser.add_argument("--discovery", dest="discovery", required=False, action="store_const", const=True, help="Enable discovery scan prior to running nessus.")
-    parser.add_argument("--guess", dest="enable_guessing", required=False, action="store_const", const=True, help="Enable guessing mode for lackey")
     parser.add_argument("--eyewitness", dest="run_eyewitness", required=False, action="store_const", const=True, help="Enable eyewitness mode for lackey")
+    parser.add_argument("--guess", dest="enable_guessing", required=False, action="store_const", const=True, help="Enable guess mode for lackey")
 
     args = parser.parse_args()
     return args

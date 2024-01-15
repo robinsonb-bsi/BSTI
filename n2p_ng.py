@@ -7,7 +7,6 @@ import os
 import requests
 import sys
 import atexit
-from halo import Halo
 from typing import Any, Union, Callable
 import pretty_errors
 
@@ -20,34 +19,6 @@ from helpers import (
 
 # Disable SSL warnings
 requests.packages.urllib3.disable_warnings()
-
-"""
-#TODO
-refine custom field grouping by category (OOD findings) - currently mostly working - may need to restructure json 
-verbose mode
-
-#DONE
-break off helper classes into their own scripts
-references fixed => no longer replaces 
-create mode comply with naming convention
-remove states - not really needed due to how fast the script is now.
-fix screenshot directory issue
-polish README and docs
-modify to handle external mode for screenshots 
-atexit cleanup => move plextrac_format.csv to _merged folder
-screenshots for non-merged findings
-input validation fixes - report id, client id, etc
-create report, client 
-pull desc and reco from writeup db instead of local copy
-add non-core custom fields with --noncore option 
-findings takes highest severity
-fix merged assets issue
-merged assets not matching custom field assets
-progress bars with halo 
-software components out of date and vulnerable - vuln mapping not working correctly - saying medium apache but critical
-custom field checker for non-core => probably not needed due to new custom field creation adding everything 
-add description/recommendations to config file - copy from writeupdb 
-"""
 
 class MainEngine:
     """
@@ -146,84 +117,54 @@ class MainEngine:
         """Perform cleanup actions upon program exit."""
         log.info("Cleaning up...")
         self.cleanup_plextrac_format_file()
-        # self._cleanup_processed_findings()
-    
-    def _cleanup_processed_findings(self):
-        if os.path.exists(self.PROCESSED_FINDINGS_FILE):
-            user_input = input("Do you need to import findings from another scope (int/ext)? (y/n): ")
-            if user_input.lower() == 'n':
-                try:
-                    os.remove(self.PROCESSED_FINDINGS_FILE)
-                    log.info("Processed findings file successfully deleted.")
-                except OSError as e:
-                    log.error(f"Error deleting the processed findings file: {e}")
-            else:
-                log.info("Processed findings file not deleted.")
 
     def authenticate_to_plextrac(self) -> None:
         """Authenticate to the Plextrac platform."""
-        self._execute_with_spinner(
-            "Authenticating to Plextrac",
-            self.plextrac_handler.authenticate
-        )
-    
+        self._execute_action("Authenticating to Plextrac", self.plextrac_handler.authenticate)
+
     def convert_to_plextrac_format(self) -> None:
         """Convert Nessus file to Plextrac format."""
         def convert_action():
             self.converter.convert(self.PLEXTRAC_FORMAT_FILE)
         
-        self._execute_with_spinner(
-            "Converting Nessus file to Plextrac format", 
-            convert_action
-        )
-    
+        self._execute_action("Converting Nessus file to Plextrac format", convert_action)
+
     def upload_nessus_file(self) -> None:
         """Upload Nessus file to Plextrac."""
-        self._execute_with_spinner(
-            "Uploading Nessus file to Plextrac", 
-            lambda: self.plextrac_handler.upload_nessus_file(self.PLEXTRAC_FORMAT_FILE)
-        )
-    
+        self._execute_action("Uploading Nessus file to Plextrac", 
+                             lambda: self.plextrac_handler.upload_nessus_file(self.PLEXTRAC_FORMAT_FILE))
+
     def upload_screenshots(self) -> None:
         """Upload screenshots to Plextrac."""
-
         def upload_screenshots_action() -> None:
             self.screenshot_uploader.flaw_update_engine()
 
-        self._execute_with_spinner(
-            "Updating flaws", 
-            upload_screenshots_action
-        )
+        self._execute_action("Updating flaws", upload_screenshots_action)
 
     def process_descriptions(self):
         """Process and update descriptions for flaws."""
-        self._execute_with_spinner(
-            "Processing and updating descriptions for flaws",
-            self.description_processor.process
-        )
+        self._execute_action("Processing and updating descriptions for flaws",
+                             self.description_processor.process)
 
     def add_noncore_fields(self):
         """Process and update custom fields for flaws."""
-        self._execute_with_spinner(
-            "[NONCORE] Processing and updating custom fields for flaws",
-            self.non_core_updater.process
-        )
+        self._execute_action("[NONCORE] Processing and updating custom fields for flaws",
+                             self.non_core_updater.process)
 
-    
-    def _execute_with_spinner(self, message: str, action: Callable[[], None]) -> None:
-        """Execute a function with a spinner.
+    def _execute_action(self, message: str, action: Callable[[], None]) -> None:
+        """Execute a function with status log messages.
 
-        :param message: The message to display while the spinner is active.
+        :param message: The message to display while the action is ongoing.
         :param action: The function to execute.
         """
-        spinner = Halo(text=f"{message}...", spinner="dots").start()
+        log.info(f"{message}...")
         try:
             action()
         except Exception as e:
-            spinner.fail(f"Error occurred while {message.lower()}: {e}")
+            log.error(f"Error occurred while {message.lower()}: {e}")
             raise
         else:
-            spinner.succeed(f"{message} => Done")
+            log.success(f"{message} => Done")
     
     def get_access_token(self) -> Union[str, None]:
         """Authenticate and obtain an access token from Plextrac.

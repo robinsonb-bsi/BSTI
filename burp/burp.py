@@ -5,10 +5,8 @@ import os
 import base64
 import html
 from scripts.logging_config import log
-from halo import Halo
 # TODO 
 # add out of scope requests
-# progress bar
 
 class Burper:
     def __init__(self, api_url, api_key, burp_urls, usernames=None, passwords=None, reattach=False):
@@ -605,8 +603,8 @@ class Burper:
         log.success(f'Report generated successfully as {output_path}')
         return True
 
-    @Halo(text='Scanning...', spinner='dots')
     def engine(self):
+        log.info('Scanning...')
         self.scan_id = self.launch_scan(self.scan_type)
         while True:
             # Get the scan progress
@@ -629,10 +627,11 @@ class Burper:
             else:
                 break
             time.sleep(10)
+
             
-    @Halo(text='Reattaching...', spinner='dots')
     def reattach(self):
         try:
+            log.info('Reattaching...')
             with open('scan_data.json', 'r') as json_file:
                 scan_data = json.load(json_file)
             scan_configurations = scan_data['scan_configurations']
@@ -660,36 +659,7 @@ class Burper:
                         log.warning('Unable to seed urls or scan was manually paused.')
                         break
                 time.sleep(5)
-            
         except FileNotFoundError:
             log.error('No scan data found. Please launch a scan first.')
         except Exception as e:
             log.error(e)
-
-# burp_command = 'burpsuite'
-
-# if platform.system() == 'Windows':
-#     # Check if Burp Suite executable exists in default installation directories
-#     program_files_dir = os.environ.get('ProgramFiles')
-#     program_files_x86_dir = os.environ.get('ProgramFiles(x86)')
-#     if program_files_dir and os.path.exists(os.path.join(program_files_dir, 'Burp Suite', 'burp.exe')):
-#         burp_command = os.path.join(program_files_dir, 'Burp Suite', 'burp.exe')
-#     elif program_files_x86_dir and os.path.exists(os.path.join(program_files_x86_dir, 'Burp Suite', 'burp.exe')):
-#         burp_command = os.path.join(program_files_x86_dir, 'Burp Suite', 'burp.exe')
-# else:
-#     # Check if Burp Suite executable exists in PATH
-#     result = subprocess.run(['which', burp_command], capture_output=True, text=True)
-#     if result.returncode != 0:
-#         # Burp Suite not found in PATH, check other common locations
-#         possible_paths = [
-#             '/opt/BurpSuite/burpsuite',
-#             '/usr/local/bin/burpsuite',
-#             '/usr/bin/burpsuite',
-#         ]
-#         for path in possible_paths:
-#             if os.path.exists(path):
-#                 burp_command = path
-#                 break
-
-# # Launch Burp Suite in headless mode
-# subprocess.run([burp_command, '--headless'], check=True)

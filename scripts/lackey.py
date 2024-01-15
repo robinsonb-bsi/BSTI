@@ -5,16 +5,12 @@ import sys
 import hashlib
 from filelock import FileLock
 import html
-from fuzzywuzzy import fuzz
 import os
 import pickle
 from htmlwebshot import WebShot, Config
 from scripts.drone import Drone
 from scripts.parser import ConfigParser
 from scripts.logging_config import log
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-from scripts.nmap_scripts import nmap_script_data
 from scripts.interpreter import Interpreter
 from scripts.analyzer import Analyzer
 import shutil
@@ -27,10 +23,6 @@ class Lackey:
         self.client_dir = os.path.splitext(self.csv_file)[0]
         self.nessus_file = os.path.splitext(self.csv_file)[0] + ".nessus"
         self.local_checks = local_checks
-        self.enable_educated_guess = educated_guess
-        self.educated_guess_items = []
-        if self.enable_educated_guess:
-            log.info("Educated Guess mode enabled.")
         self.drone = None if local_checks else Drone(drone, username, password)
         self.operating_system = platform.system()
         self.checked_plugins = set()
@@ -171,109 +163,6 @@ class Lackey:
 
             except Exception as e:
                 log.error(f"An error occurred during execution: {e}")
-                 
-
-    def match_to_scripts(self, scripts, missing_plugin):
-        tfidf_vectorizer = TfidfVectorizer(stop_words='english')
-        
-        # Remove \r characters from scripts
-        scripts = [script.replace('\r', '') for script in scripts]
-        
-        # Rigorous filtering of scripts to remove empty or whitespace-only strings
-        scripts = [script for script in scripts if script and script.strip()]
-
-        all_texts = [missing_plugin] + scripts
-
-        tfidf_matrix = tfidf_vectorizer.fit_transform(all_texts)
-        cosine_sim = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:])
-        
-        # Flatten the cosine similarity array and pair it with script names
-        paired_scores = list(zip(scripts, cosine_sim[0]))
-
-        # Sort by cosine similarity in descending order
-        sorted_scores = sorted(paired_scores, key=lambda x: x[1], reverse=True)
-        
-        # Get top N scripts by cosine similarity
-        top_n = 10  # Adjust as needed
-
-        # Among top N, get the script with the highest combined cosine and fuzzy score
-        best_match_script = max(sorted_scores[:top_n], 
-                                key=lambda x: (x[1], fuzz.ratio(missing_plugin, x[0]), -len(x[0])))[0]
-        
-        log.info(f"Best Match: {best_match_script}")
-        for script, score in sorted_scores[:top_n]:
-            log.debug(f"Script: '{script}', Cosine Score: {score:.2f}, Fuzzy Score: {fuzz.ratio(missing_plugin, script)}")
-
-        return best_match_script
-        
-    def get_scripts(self):
-        scripts = []
-        try:
-            data = nmap_script_data()
-            lines = data.split('\n')
-            for i, line in enumerate(lines):
-                if "Categories:" in line and "brute" not in line:
-                    script_name = lines[i - 1]
-                    scripts.append(script_name.strip())
-        except Exception as e:
-            log.error(f"Error getting nmap scripts: {e}")
-        return scripts
- 
-        
-    
-    def educated_guess_checks(self, missing_plugin, host, port, scripts):
-        try:
-            scan_type = "nmap -T4"
-            matched_script = self.match_to_scripts(scripts, missing_plugin)
-            
-            # Ensure matched_script is not empty
-            if not matched_script:
-                log.error(f"No script match found for {missing_plugin}")
-                return False
-
-            # Use the matched script for the Nmap command
-            parameters = f"-p {port} --script {matched_script} {host}"
-
-            log.info(f"Running educated guess check for {missing_plugin} on {host}:{port}")
-            
-            # Run the scan with default parameters
-            output = self.run_scan(host, port, None, scan_type, parameters, self.drone, self.local_checks)
-            
-            log.success(f"Educated guess check for {missing_plugin} on {host}:{port} completed")
-
-            match = self.state_pattern.search(output)
-            if match:
-                return output
-
-        except Exception as e:
-            print(f"Error running educated guess check for {missing_plugin} on {host}:{port}: {str(e)}")
-            
-    def handle_educated_guess(self, host, port, name, scripts):
-        for missing_plugin in self.missing_plugins:
-            if missing_plugin in self.checked_plugins:
-                continue
-                
-            educated_output = self.educated_guess_checks(name, host, port, scripts)
-            
-            self.checked_plugins.add(missing_plugin)
-            
-            return educated_output
-
-    
-    def process_educated_guess(self):
-        if not self.enable_educated_guess:
-            return
-
-        print("Educated Guess Plugins:")
-        print("-" * 50)
-        scripts = self.get_scripts()
-        for plugin_id in self.missing_plugins:
-            print(f"[+] {plugin_id[2]}")
-        print("-" * 50)
-        for host, port, name in self.missing_plugins:
-            educated_guess_result = self.handle_educated_guess(host, port, name, scripts)
-            if educated_guess_result:
-                self.educated_guess_items.append((name, host, port, educated_guess_result, False))
 
         
     def run_scan(self, host, port, plugin_id, scan_type, parameters, drone, local_checks=False):
@@ -404,7 +293,6 @@ class Lackey:
     def engine(self):
         try:
             self.current_host_index, _ = self.load_initial_state()
-            self.process_educated_guess()
 
             plugin_to_category = {
                 plugin_id: (category, category_data) 
@@ -675,23 +563,6 @@ class Lackey:
                     f.write(f'<tr onclick="toggleDetails(this)"><td>{plugin_name}</td></tr>\n')
                     f.write('<tr class="details" style="display: none;"><td colspan="2"></td></tr>\n')
                 f.write('</table>\n')
-                
-                f.write('<h1>Educated Guess Results</h1>\n')
-                f.write('<table>\n')
-                f.write('<tr><th>Plugin Name</th><th>Host:Port</th></tr>\n')
-                for item in self.educated_guess_items:
-                    plugin_name = item[0]
-                    ip = item[1]
-                    port = item[2]
-                    output = item[3]
-                    f.write(f'<tr onclick="toggleDetails(this)"><td><span class="arrow">&#9658;</span>{html.escape(plugin_name)}</td><td>{html.escape(ip)}:{html.escape(port)}</td></tr>\n')
-                    f.write('<tr class="details" style="display: none;"><td colspan="3">\n')
-                    f.write('<div class="code-block">\n')
-                    f.write(f'<pre>{html.escape(output)}</pre>\n')
-                    f.write('</div>\n')
-                    f.write('</td></tr>\n')
-                f.write('</table>\n')
-
                 f.write('</body>\n')
                 f.write('</html>\n')
 

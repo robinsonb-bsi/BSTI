@@ -1,5 +1,4 @@
 import paramiko
-import os
 from scripts.logging_config import log
 import threading
 class Drone:

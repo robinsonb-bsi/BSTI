@@ -4,12 +4,10 @@ import json
 import csv
 import re
 import sys
-from tabulate import tabulate
 import time
 import xml.etree.ElementTree as XML
 import requests, urllib3
 from scripts.logging_config import log
-from halo import Halo
 requests.packages.urllib3.disable_warnings()
 
 
@@ -227,12 +225,36 @@ class Nessus:
 
     def print_hosts_table(self, hosts_list, header):
         """
-        Prints a table of hosts with a given header.
+        Prints a table of hosts with a given header using built-in Python libraries.
         """
         num_columns = 5
+        # Split the list into a 2D list for the table rows
         table_data = [hosts_list[i:i + num_columns] for i in range(0, len(hosts_list), num_columns)]
+
+        # Calculate column widths
+        column_widths = [0] * num_columns
+        for row in table_data:
+            for i, cell in enumerate(row):
+                column_widths[i] = max(column_widths[i], len(cell))
+
+        # Function to create a row string
+        def create_row(row, widths, separator=' | '):
+            return separator.join(cell.ljust(width) for cell, width in zip(row, widths))
+
+        # Print the header
         headers = [header] * min(num_columns, len(hosts_list))
-        print(tabulate(table_data, headers=headers, tablefmt="fancy_grid"))
+        header_line = create_row(headers, column_widths)
+        border_line = '+' + '+'.join('-' * (w + 2) for w in column_widths) + '+'
+
+        print(border_line)
+        print('| ' + header_line + ' |')
+        print(border_line)
+
+        # Print table rows
+        for row in table_data:
+            print('| ' + create_row(row, column_widths) + ' |')
+            print(border_line)
+
 
     def get_device_name(self):
         log.info("Getting drone device name")

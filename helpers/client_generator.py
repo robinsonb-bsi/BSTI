@@ -1,7 +1,6 @@
 from typing import List, Tuple, Union
 from helpers import log
 import re 
-from PyInquirer import prompt as inquirer_prompt
 
 class ClientReportGen:
     """Client report generation class for Plextrac."""
@@ -106,11 +105,21 @@ class ClientReportGen:
         
         return sorted_templates
 
-    def gather_info(self) -> Tuple[str, str, str, str]:
-        """Gathers required information from the user.
+    def select_option(self, options: List[dict], message: str) -> str:
+        """Presents a list of options and returns the user's choice."""
+        print(message)
+        for i, option in enumerate(options, 1):
+            print(f"{i}. {option['name']}")
         
-        :return: Tuple containing selected report and field templates and their names
-        """
+        while True:
+            choice = input("Enter your choice (number): ")
+            if choice.isdigit() and 1 <= int(choice) <= len(options):
+                return options[int(choice) - 1]['value']
+            else:
+                print("Invalid choice. Please enter a number from the list.")
+
+    def gather_info(self) -> Tuple[str, str, str, str]:
+        """Gathers required information from the user."""
         url = self.url_manager.get_report_template_url()
         response = self.request_handler.get(url)
         report_templates = self.parse_templates(response.json())
@@ -122,25 +131,14 @@ class ClientReportGen:
         # Add a "None" option for custom fields
         custom_field_templates.append({'name': 'None', 'value': ''})
 
-        questions = [
-            {
-                'type': 'list',
-                'name': 'report_template',
-                'message': 'Select a report template:',
-                'choices': report_templates
-            },
-            {
-                'type': 'list',
-                'name': 'custom_field_template',
-                'message': 'Select a custom field template:',
-                'choices': custom_field_templates
-            }
-        ]
+        report_template = self.select_option(report_templates, 'Select a report template:')
+        custom_field_template = self.select_option(custom_field_templates, 'Select a custom field template:')
 
-        answers = inquirer_prompt(questions)
-        return answers['report_template'], answers['custom_field_template'], \
-           next(template['name'] for template in report_templates if template['value'] == answers['report_template']), \
-           next(template['name'] for template in custom_field_templates if template['value'] == answers['custom_field_template'])
+        report_template_name = next(template['name'] for template in report_templates if template['value'] == report_template)
+        custom_field_template_name = next(template['name'] for template in custom_field_templates if template['value'] == custom_field_template)
+
+        return report_template, custom_field_template, report_template_name, custom_field_template_name
+
 
     def run(self) -> None:
         """Main function to run the report generation process."""

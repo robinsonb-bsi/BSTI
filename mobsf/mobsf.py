@@ -9,7 +9,6 @@ import os
 import sys
 from openpyxl.styles import PatternFill
 from scripts.logging_config import log
-from halo import Halo
 
 """
 sudo sdkmanager "system-images;android-28;google_apis;x86_64"
@@ -125,17 +124,24 @@ class Mobber:
 
 
 
-    @Halo(text='Scanning file...', spinner='dots')
     def monitor_scan(self):
+        """Initiates a scan and logs its progress."""
+        log.info('Scanning file...')
+
         data = {
             "file_name": self.file_name,
             "hash": self.hash_value,
             "scan_type": self.scan_type,
-            "re_scan": "0"  # 0 for no rescan 1 for rescan
+            "re_scan": "0"  # 0 for no rescan, 1 for rescan
         }
-        response = requests.post(self.scan_url, headers=self.headers, data=data)
-        return response
 
+        try:
+            response = requests.post(self.scan_url, headers=self.headers, data=data)
+            log.info('Scan completed successfully.')
+            return response
+        except Exception as e:
+            log.error(f'Error during scan: {e}')
+            raise
 
     def scan_file(self):
         response = self.monitor_scan()

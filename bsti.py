@@ -30,7 +30,6 @@ warnings.filterwarnings("ignore", category=DeprecationWarning,
 # TODO 
 """
 organize code :(
-fix halo spinner on n2p and nmb
 
 # Done
 parser for csv built-in
@@ -1486,7 +1485,6 @@ class MainWindow(QMainWindow):
                 "scope": ["core", "nc", "custom"],
                 "exclude-file": "File",
                 "discovery": "Checkbox",
-                "guess": "Checkbox",
                 "eyewitness": "Checkbox"
             },
             "create": {
@@ -1514,13 +1512,11 @@ class MainWindow(QMainWindow):
             "internal": {
                 "csv-file": "File",
                 "local": "Checkbox",
-                "guess": "Checkbox",
                 "eyewitness": "Checkbox"
             },
             "external": {
                 "csv-file": "File",
                 "local": "Checkbox",
-                "guess": "Checkbox",
                 "eyewitness": "Checkbox"
             },
             "web": {

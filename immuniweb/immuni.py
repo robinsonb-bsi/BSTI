@@ -5,15 +5,10 @@ import json
 import re 
 import time 
 from scripts.logging_config import log
-import ping3
 
 class Immuniweb:
     def __init__(self, api_key, scan_type, app_path):
         self.baseurl = "https://www.immuniweb.com/mobile/api/"
-        if self.ping_check("www.immuniweb.com"):
-            log.success("Connection to immuniweb verified")
-        else:
-            log.error("Can't connect to immuniweb's site - make sure you have an internet connection")
 
         self.app_file_path = app_path
         self.api_key = api_key
@@ -45,19 +40,7 @@ class Immuniweb:
         self.test_id = self.upload_app()
         self.test_progress()
         self.report_link()
-
-
-    def ping_check(self, hostname):
-        log.info("testing connection to immuniweb")
-        try:
-            response_time = ping3.ping(hostname)
-        except ping3.errors.PingError:
-            return False
-        return True
-
-
-
-        
+     
     def download_apk(self):
         log.info(f"Downloading APK from: {self.download_link}")
 

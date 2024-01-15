@@ -1,7 +1,5 @@
 import xml.etree.ElementTree as XML
 import os
-import re
-import json
 import sys
 
 class Analyzer:
