@@ -94,7 +94,7 @@ python -m venv myvenv
 # Linux:
 source myvenv/bin/activate
 # Windows:
-.\myvenv\bin\activate.ps1
+.\myvenv\Scripts\Activate.ps1
 
 # Install the requirements
 pip install -r requirements.txt
