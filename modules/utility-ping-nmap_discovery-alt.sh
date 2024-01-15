@@ -6,4 +6,5 @@
 
 sudo nmap -n -sn -iL /tmp/targets.txt -oG - | awk '/Up$/{print $2}' > /tmp/up.txt
 echo "Total number of hosts is:"
+ls /tmmp/up.txt
 wc -l /tmp/up.txt
