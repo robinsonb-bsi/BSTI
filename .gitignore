@@ -19,3 +19,5 @@ __pycache__
 demo-ssl-nmap.sh
 !Default Good Model Nessus Vulnerability Policy.nessus
 !Custom_Nessus_Policy-Pn_pAll_AllSSLTLS-Web-NoLocalCheck-NoDOS.nessus
+demo-ssl-nmap.py
+demo-file_upload-nmap.sh

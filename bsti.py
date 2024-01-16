@@ -846,7 +846,7 @@ class CredentialsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.setWindowTitle("Enter Credentials")
+        self.setWindowTitle("Enter Plextrac Credentials")
 
         layout = QFormLayout(self)
         self.usernameLineEdit = QLineEdit(self)
@@ -1037,7 +1037,7 @@ class MainWindow(QMainWindow):
         self.tab_widget.addTab(self.module_editor_tab, "Module Editor")
 
         # Add Lint button
-        self.lint_button = QPushButton("Lint")
+        self.lint_button = QPushButton("Auto-Format Python Module")
         self.lint_button.clicked.connect(self.apply_autopep8)
         self.module_editor_layout.addWidget(self.lint_button)
 
@@ -1171,12 +1171,29 @@ class MainWindow(QMainWindow):
 
     def apply_autopep8(self):
         try:
-            current_code = self.module_editor.toPlainText()
-            formatted_code = autopep8.fix_code(current_code)
-            self.module_editor.setPlainText(formatted_code)
-            QMessageBox.information(self, "autopep8", "Formatting applied successfully.")
+            current_module_type = self.get_current_module_type()
+
+            if current_module_type == 'python':
+                current_code = self.module_editor.toPlainText()
+                formatted_code = autopep8.fix_code(current_code)
+                self.module_editor.setPlainText(formatted_code)
+                QMessageBox.information(self, "autopep8", "Formatting applied successfully.")
+            else:
+                QMessageBox.warning(self, "autopep8", "This feature is only available for Python modules.")
         except Exception as e:
             QMessageBox.warning(self, "autopep8", f"An error occurred: {e}")
+
+    def get_current_module_type(self):
+        current_filename = self.moduleComboBox.currentText()
+
+        if current_filename.endswith('.py'):
+            return 'python'
+        elif current_filename.endswith('.sh'):
+            return 'bash'
+        elif current_filename.endswith('.json'):
+            return 'json'
+        else:
+            return 'unknown'
 
 
     def run_plugin_manager(self):
@@ -1933,15 +1950,15 @@ class MainWindow(QMainWindow):
             content = ""
             if filename.endswith(".py"):
                 content = "#!/usr/bin/env python3\n"
-                content += "# ARGS\n# ARG1 \"Example_description_with_underscores\"\n# ENDARGS\n# AUTHOR: \n\n"
+                content += "# ARGS\n# ARG1 \"Example description\"\n# ENDARGS\n# AUTHOR: \n\n"
             elif filename.endswith(".sh"):
                 content = "#!/bin/bash\n"
-                content += "# ARGS\n# ARG1 \"Example_description_with_underscores\"\n# ENDARGS\n# AUTHOR: \n\n"
+                content += "# ARGS\n# ARG1 \"Example description\"\n# ENDARGS\n# AUTHOR: \n\n"
             elif filename.endswith(".json"):
                 content = json.dumps({
                     "grouped": True,
                     "tabs": [
-                        {"name": "Window_name_1", "command": "echo 'test'"},
+                        {"name": "Windowname 1", "command": "echo 'test'"},
                         {"name": "Window 1", "command": "echo 'Tab 1' && sleep 3600"},
                         {"name": "Window 3", "command": "echo 'Tab 2' && sleep 3600"}
                     ]
@@ -2271,7 +2288,7 @@ class MainWindow(QMainWindow):
                     self.drones[drone_id] = (host, username, password)
                     self.drone_selector.addItem(drone_id)
                     save_config(self.drones)
-                    
+
                     QMessageBox.information(self, "Configuration Saved", 
                                             f"Configuration for '{drone_id}' has been successfully saved.")
 

@@ -5,7 +5,6 @@
 import json
 import csv
 from helpers.custom_logger import log
-import pretty_errors
 from PyInquirer import prompt
 import os
 import argparse
