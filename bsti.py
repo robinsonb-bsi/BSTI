@@ -214,8 +214,17 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, "drones.json")
 
 def save_config(drones):
     os.makedirs(CONFIG_DIR, exist_ok=True)
+    
+    existing_config = {}
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, 'r') as file:
+            existing_config = json.load(file)
+
+    existing_config.update(drones)
+
     with open(CONFIG_FILE, 'w') as file:
-        json.dump(drones, file, indent=4)
+        json.dump(existing_config, file, indent=4)
+
 
 def load_config():
     if os.path.exists(CONFIG_FILE):
@@ -2044,9 +2053,12 @@ class MainWindow(QMainWindow):
 
 
     def get_current_drone_connection(self):
-        drone_id = self.drone_selector.currentText()
-        host, username, password = self.drones[drone_id]
-        return host, username, password
+        try:
+            drone_id = self.drone_selector.currentText()
+            host, username, password = self.drones[drone_id]
+            return host, username, password
+        except KeyError:
+            return None, None, None
 
 
     def filter_drones(self, text):
@@ -2259,6 +2271,9 @@ class MainWindow(QMainWindow):
                     self.drones[drone_id] = (host, username, password)
                     self.drone_selector.addItem(drone_id)
                     save_config(self.drones)
+                    
+                    QMessageBox.information(self, "Configuration Saved", 
+                                            f"Configuration for '{drone_id}' has been successfully saved.")
 
 
     def close_current_tab(self, index):
