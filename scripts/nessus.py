@@ -172,7 +172,7 @@ class Nessus:
         try:
             # Run the nmap scan
             self.targets_list = self.targets_list.rstrip(',')
-            cmd = f"sudo nmap --exclude {self.drone_ip} -T3 -n -sn {self.targets_list} -PE -PP -PM -PO -oG -"
+            cmd = f"sudo nmap --exclude {self.drone_ip} -T4 -n -sn {self.targets_list} -PE -PP -PM -PO --min-parallelism 100 --max-parallelism 256 -oG -"
             nmap_output = self.drone.execute(cmd)
 
             # If the output is in bytes, decode it to a string
@@ -556,13 +556,13 @@ class Nessus:
         update_interval = 60  # seconds for regular updates
         next_update_time = update_interval
 
-        while status in ["running", "pending", "resuming"]:
+        while status in ["running", "pending", "resuming", "queued"]:
             time.sleep(15)
             time_elapsed += 15
             status = self.get_scan_info()["status"]
 
             if time_elapsed >= next_update_time:
-                log.info(f"Scan status after {time_elapsed // 60} minutes: {status}")
+                log.info(f"Scan status: {status}")
                 next_update_time += update_interval
 
             if time_elapsed == 300:  # Re-authenticate every 5 minutes
@@ -615,19 +615,6 @@ class Nessus:
 
             # format handlers
             formats = {
-                "nessus": {
-                    "format": "nessus"
-                },
-                "html": {
-                    "format": "html",
-                    "template_id": template_id,
-                    "csvColumns": {},
-                    "formattingOptions": {},
-                    "extraFilters": {
-                        "host_ids": [],
-                        "plugin_ids": []
-                    }
-                }, 
                 "csv": {
                     "format": "csv",
                     "template_id": "",
@@ -656,6 +643,19 @@ class Nessus:
                             "exploitable_with": True
                         }
                     },
+                    "extraFilters": {
+                        "host_ids": [],
+                        "plugin_ids": []
+                    }
+                },
+                "nessus": {
+                    "format": "nessus"
+                },
+                "html": {
+                    "format": "html",
+                    "template_id": template_id,
+                    "csvColumns": {},
+                    "formattingOptions": {},
                     "extraFilters": {
                         "host_ids": [],
                         "plugin_ids": []

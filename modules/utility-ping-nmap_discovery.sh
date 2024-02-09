@@ -8,6 +8,7 @@
 TMUX_SESSION="nmap_discovery_scan"
 TARGETS_FILE="/tmp/targets.txt"
 EXCLUDE_FILE="/tmp/exclude.txt"
+OUTPUT_FILE="/tmp/nmap_results.txt"  # Define the output file for Nmap results
 
 # Check if the tmux session already exists
 if tmux has-session -t $TMUX_SESSION 2>/dev/null; then
@@ -22,10 +23,11 @@ else
     if [ -s "$EXCLUDE_FILE" ]; then
         NMAP_CMD+=" --excludefile $EXCLUDE_FILE"
     fi
-    NMAP_CMD+=" -oG - | awk '/Up\$/{print \$2}'; bash"  # Append '; bash' to keep the session open
+    NMAP_CMD+=" -oG $OUTPUT_FILE | awk '/Up\$/{print \$2}'; bash"  # Save the output to the file and extract IPs
 
     # Create a new tmux session and run the Nmap command
     tmux new-session -d -s $TMUX_SESSION "$NMAP_CMD"
     echo "Nmap scan started in tmux session $TMUX_SESSION."
     echo "Use 'tmux attach -t $TMUX_SESSION' or the UI to interact with the session."
+    echo "Scan results will be saved in $OUTPUT_FILE."
 fi

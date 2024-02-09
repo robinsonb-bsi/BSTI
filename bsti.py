@@ -5,10 +5,11 @@
 import sys
 import os
 import pandas as pd
-from PyQt5.QtWidgets import (QApplication, QMenu, QInputDialog, QDialogButtonBox, QTableWidget, QTableWidgetItem, QCheckBox, QLabel, QAction, QTabBar, QStyle, QPlainTextEdit, QMainWindow, QGridLayout, QHBoxLayout, QTabWidget, QTextEdit, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QDialog, QLineEdit, QFormLayout, QMessageBox, QComboBox)
+from PyQt5.QtWidgets import (QApplication, QCompleter, QMenu, QInputDialog, QDialogButtonBox, QTableWidget, QTableWidgetItem, QCheckBox, QLabel, QAction, QTabBar, QStyle, QPlainTextEdit, QMainWindow, QGridLayout, QHBoxLayout, QTabWidget, QTextEdit, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QDialog, QLineEdit, QFormLayout, QMessageBox, QComboBox)
 from PyQt5.QtCore import QThread, pyqtSignal, QUrl, QRegExp, Qt, QProcess
 from PyQt5.QtGui import QTextCursor, QFont, QSyntaxHighlighter, QTextCharFormat, QColor, QDesktopServices
 from PyQt5.QtWebKitWidgets import QWebView
+from PyQt5.QtGui import QTextCharFormat, QColor
 import paramiko
 from scp import SCPClient
 import tempfile
@@ -24,6 +25,7 @@ import hashlib
 import warnings
 import shlex
 import autopep8
+import time
 warnings.filterwarnings("ignore", category=DeprecationWarning, 
                         message=".*sipPyTypeDict.*") # hushes annoying errors for now temp solution
 
@@ -214,16 +216,8 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, "drones.json")
 
 def save_config(drones):
     os.makedirs(CONFIG_DIR, exist_ok=True)
-    
-    existing_config = {}
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, 'r') as file:
-            existing_config = json.load(file)
-
-    existing_config.update(drones)
-
     with open(CONFIG_FILE, 'w') as file:
-        json.dump(existing_config, file, indent=4)
+        json.dump(drones, file, indent=4)
 
 
 def load_config():
@@ -540,6 +534,146 @@ class DroneConfigDialog(QDialog):
     def get_details(self):
         return self.host_input.text(), self.username_input.text(), self.password_input.text()
 
+class InteractiveSshThread(QThread):
+    output = pyqtSignal(str)
+
+    def __init__(self, hostname, username, password, parent=None):
+        super(InteractiveSshThread, self).__init__(parent)
+        self.hostname = hostname
+        self.username = username
+        self.password = password
+        self.command = None
+        self.aliases = {
+            "invoke-ls": "ls -lah",
+            "invoke-top": "top -n 1",
+            "invoke-ps": "ps aux",
+            "invoke-nmap": "nmap -sV",
+        }
+
+    def run(self):
+        try:
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            client.connect(self.hostname, username=self.username, password=self.password)
+            channel = client.invoke_shell()
+
+            # Explicitly start Bash shell - zsh has formatting issues
+            channel.send("bash\n")
+
+            while True:
+                    if self.command is not None:
+                        command_parts = self.command.split()
+                        base_command = command_parts[0]
+                        additional_args = ' '.join(command_parts[1:])
+
+                        if base_command in self.aliases:
+                            processed_command = self.aliases[base_command] + ' ' + additional_args
+                        elif base_command.startswith("invoke-"):
+                            self.output.emit(f"Error: Unknown command '{base_command}'\n")
+                            processed_command = ""
+                        else:
+                            processed_command = self.command
+                        
+                        if processed_command:
+                            channel.send(processed_command + '\n')
+                        self.command = None
+
+                    if channel.recv_ready():
+                        line = channel.recv(1024).decode('utf-8')
+                        self.output.emit(line)
+                    else:
+                        time.sleep(0.1)
+        except:
+            pass
+    def send_command(self, command):
+        self.command = command
+
+class PromptLineEdit(QLineEdit):
+    def __init__(self, prompt=">>> ", parent=None):
+        super().__init__(parent)
+        self.prompt = prompt
+        self.setText(self.prompt)
+        self.setCursorPosition(len(self.prompt))  
+
+    def focusInEvent(self, event):
+        if self.text() == self.prompt:
+            self.setCursorPosition(len(self.prompt))  
+        QLineEdit.focusInEvent(self, event)
+
+    def keyPressEvent(self, event):
+        if self.text() == self.prompt:
+            self.setText('')
+        QLineEdit.keyPressEvent(self, event)
+
+    def focusOutEvent(self, event):
+        if self.text().strip() == "":
+            self.setText(self.prompt)
+            self.setCursorPosition(len(self.prompt))  
+        QLineEdit.focusOutEvent(self, event)
+
+
+class TerminalWidget(QWidget):
+    def __init__(self, hostname, username, password):
+        super().__init__()
+        self.ssh_thread = InteractiveSshThread(hostname, username, password)
+        self.ssh_thread.output.connect(self.append_output)
+        self.ssh_thread.start()
+        self.commandHistory = []
+        self.historyIndex = -1
+        self.initUI()
+
+    def initUI(self):
+        self.layout = QVBoxLayout(self)
+        self.textEdit = QTextEdit()
+        self.lineEdit = PromptLineEdit()
+
+        self.textEdit.setStyleSheet("background-color: black; color: white;")
+        self.lineEdit.setStyleSheet("background-color: black; color: white;")
+        font = QFont("Consolas", 10)
+        self.textEdit.setFont(font)
+        self.lineEdit.setFont(font)
+
+        completer = QCompleter(list(self.ssh_thread.aliases.keys()))
+        completer.setCaseSensitivity(Qt.CaseInsensitive)
+        self.lineEdit.setCompleter(completer)
+
+        self.layout.addWidget(self.textEdit)
+        self.layout.addWidget(self.lineEdit)
+
+        self.lineEdit.returnPressed.connect(self.onReturnPressed)
+
+    def onReturnPressed(self):
+        command = self.lineEdit.text()
+        if command.startswith(self.lineEdit.prompt):
+            command = command[len(self.lineEdit.prompt):]  # Remove the prompt from the command
+        self.commandHistory.append(command)
+        self.historyIndex = len(self.commandHistory) - 1
+        self.ssh_thread.send_command(command)
+        self.lineEdit.clear()
+        self.lineEdit.setText(self.lineEdit.prompt)
+        self.lineEdit.setCursorPosition(len(self.lineEdit.prompt))
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key_Up, Qt.Key_Down):
+            if self.commandHistory:
+                if event.key() == Qt.Key_Up and self.historyIndex > 0:
+                    self.historyIndex -= 1
+                elif event.key() == Qt.Key_Down and self.historyIndex < len(self.commandHistory) - 1:
+                    self.historyIndex += 1
+                self.lineEdit.setText(self.commandHistory[self.historyIndex])
+
+    def strip_ansi_codes(self, text):
+        ansi_escape = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
+        stripped_text = ansi_escape.sub('', text)
+        # Trim leading and trailing whitespace and normalize new lines
+        stripped_text = stripped_text.strip().replace('\r\n', '\n').replace('\r', '\n')
+        return stripped_text
+
+
+    def append_output(self, data):
+        plain_text = self.strip_ansi_codes(data)
+        self.textEdit.append(plain_text)
+
 class SSHThread(QThread):
     update_output = pyqtSignal(str)
 
@@ -594,19 +728,28 @@ class SSHThread(QThread):
             while self.running:
                 if stdout.channel.recv_ready():
                     output = stdout.channel.recv(4096).decode('utf-8')
-                    self.update_output.emit(output)
+                    clean_output = self.strip_ansi_codes(output)
+                    self.update_output.emit(clean_output)
 
                 if stderr.channel.recv_stderr_ready():
                     output = stderr.channel.recv_stderr(4096).decode('utf-8')
-                    self.update_output.emit(output)
+                    clean_output = self.strip_ansi_codes(output)
+                    self.update_output.emit(clean_output)
 
-                self.msleep(100)  # Sleep for a short time to avoid bricking cpu :)
+                self.msleep(100)   # Sleep for a short time to avoid bricking cpu :)
 
         except Exception as e:
             self.update_output.emit(f"SSH Connection Error: {str(e)}")
         finally:
             if self.ssh:
                 self.ssh.close()
+
+    def strip_ansi_codes(self, text):
+        ansi_escape = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
+        stripped_text = ansi_escape.sub('', text)
+        # Trim leading and trailing whitespace and normalize new lines
+        stripped_text = stripped_text.strip().replace('\r\n', '\n').replace('\r', '\n')
+        return stripped_text
 
 
     def stop(self):
@@ -902,7 +1045,6 @@ class CustomTableWidget(QTableWidget):
                 return i
         return -1
 
-
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -961,6 +1103,11 @@ class MainWindow(QMainWindow):
         self.configure_ssh_key_action = QAction("Add SSH Key", self)
         self.configure_ssh_key_action.triggered.connect(self.add_ssh_key)
         self.drone_menu.addAction(self.configure_ssh_key_action)
+
+        # Delete a bstg
+        self.delete_drone_action = QAction("Delete BSTG", self)
+        self.delete_drone_action.triggered.connect(self.delete_drone)
+        self.drone_menu.addAction(self.delete_drone_action)
 
         # Tmux session attach
         self.connect_tmux_action = QAction("Connect to Tmux Session", self)
@@ -1115,6 +1262,35 @@ class MainWindow(QMainWindow):
         # hide/show tabs based on active tab
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
 
+    def delete_drone(self):
+        config = load_config()
+        if not config:
+            QMessageBox.information(self, "Information", "No BSTG configurations available.")
+            return
+
+        # Let the user select which BSTG to delete
+        bstgs = list(config.keys())
+        bstg, ok = QInputDialog.getItem(self, "Delete BSTG", "Select BSTG:", bstgs, 0, False)
+
+        if ok and bstg:
+            del config[bstg]
+            save_config(config)
+            QMessageBox.information(self, "Success", f"{bstg} configuration deleted.")
+            self.populate_drones()  # Repopulate the drone selector with updated list
+
+    def init_term_UI(self):
+        host, username, password = self.get_current_drone_connection()
+        terminalWidget = TerminalWidget(host, username, password)
+        tab_index = self.tab_widget.addTab(terminalWidget, f"{username}@{host}")
+        
+        # Add close button to the terminal tab
+        self.add_close_button_to_tab(terminalWidget, tab_index)
+
+        self.tab_widget.setCurrentIndex(tab_index)
+
+    def open_terminal_ssh(self):
+        self.init_term_UI()
+
     def open_documentation(self):
         tab = QWidget()
         tab.is_custom_tab = True
@@ -1123,7 +1299,7 @@ class MainWindow(QMainWindow):
         web_view = QWebView()
         web_view.load(QUrl.fromLocalFile(os.path.abspath(documentation_file)))
         layout.addWidget(web_view)
-        self.tab_widget.addTab(tab, "Wiki")
+        tab_index = self.tab_widget.addTab(tab, "Wiki")
         # Add close button to the tab
         close_button = QPushButton()
         close_button.setIcon(self.style().standardIcon(QStyle.SP_DockWidgetCloseButton))
@@ -1134,7 +1310,7 @@ class MainWindow(QMainWindow):
         close_button.clicked.connect(self.close_tab_from_button)
 
         self.tab_widget.tabBar().setTabButton(self.tab_widget.indexOf(tab), QTabBar.RightSide, close_button)
-    
+        self.tab_widget.setCurrentIndex(tab_index)
 
     def create_report(self):
         # Open the custom dialog
@@ -1266,6 +1442,9 @@ class MainWindow(QMainWindow):
 
         # Add close button to the tab
         self.add_close_button_to_tab(tab, index)
+
+        # switch focus
+        self.tab_widget.setCurrentIndex(index)
 
 
     def read_process_output(self, process, text_edit):
@@ -1573,11 +1752,11 @@ class MainWindow(QMainWindow):
             "mobsf": {
                 "mobsf-url": "Text",
                 "scan-type": ["apk", "ipa"],
-                "app-name": "Text"
+                "app-name": "File"
             },
             "immuniweb": {
                 "immuni-scan-type": ["apk", "ipa"],
-                "immuni-app-name": "Text",
+                "immuni-app-name": "File",
                 "force": "Checkbox"
             },
             "regen": {
@@ -1823,34 +2002,6 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to fetch tmux sessions: {str(e)}")
             return None
-
-    def open_terminal_ssh(self):
-        drone_id = self.drone_selector.currentText()
-        if not drone_id:
-            QMessageBox.warning(self, "No Drone Selected", "Please select a drone first.")
-            return
-
-        host, username, password = self.get_current_drone_connection()
-        if not host:
-            QMessageBox.warning(self, "No Host Found", "The selected drone does not have a valid host address.")
-            return
-        
-        if sys.platform == "win32":
-            # Windows (using PowerShell)
-            terminal_command = f"start powershell ssh {username}@{host}"
-        elif sys.platform.startswith("linux"):
-            # Linux
-            terminal_command = f"gnome-terminal -- ssh {username}@{host}"
-        elif sys.platform == "darwin":
-            # macOS
-            terminal_command = f"osascript -e 'tell application \"Terminal\" to do script \"ssh {username}@{host}\"'"
-        else:
-            QMessageBox.warning(self, "Unsupported Platform", "This feature is not supported on your operating system.")
-            return
-        try:
-            subprocess.run(terminal_command, shell=True)
-        except Exception as e:
-            QMessageBox.warning(self, "Error", f"Failed to open terminal: {e}")
 
     def open_socks_ssh(self):
         drone_id = self.drone_selector.currentText()
@@ -2100,9 +2251,6 @@ class MainWindow(QMainWindow):
             self.diagnostics_thread = DiagnosticThread(host, username, password)
             self.diagnostics_thread.diagnosticsUpdated.connect(self.update_diagnostics)
             self.diagnostics_thread.start()
-        else:
-            self.top_output_display.clear()
-            self.ping_output_display.clear()
 
     def init_diagnostics_ui(self):
         # Create a container for diagnostics
@@ -2269,8 +2417,11 @@ class MainWindow(QMainWindow):
 
         
     def populate_drones(self):
+        self.drone_selector.clear()
+        self.drones = load_config()
         for drone_id in self.drones:
             self.drone_selector.addItem(drone_id)
+
 
     def configure_drone(self):
         dialog = DroneConfigDialog(self)
@@ -2355,7 +2506,7 @@ class MainWindow(QMainWindow):
         close_button.clicked.connect(self.close_tab_from_button)
 
         self.tab_widget.tabBar().setTabButton(self.tab_widget.indexOf(tab), QTabBar.RightSide, close_button)
-
+        self.tab_widget.setCurrentIndex(index)
         return tab
 
 
@@ -2554,8 +2705,11 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Error", f"Unable to capture screenshot: {e}")
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    app.setStyleSheet(DRACULA_STYLESHEET)
-    main_window = MainWindow()
-    main_window.show()
-    sys.exit(app.exec_())
+    try:
+        app = QApplication(sys.argv)
+        app.setStyleSheet(DRACULA_STYLESHEET)
+        main_window = MainWindow()
+        main_window.show()
+        sys.exit(app.exec_())
+    except:
+        pass # don't handle the exceptions here

@@ -308,8 +308,8 @@ def parse_arguments():
     parser.add_argument("-an", "--app-name", dest="mobsf_app_name", required=False, help="com name of the app for automatic download, or path to mobile app")
     
     # IMMUNIWEB
-    parser.add_argument("-is", dest="immuni_scan_type", required=False, choices=["apk", "ipa"], help="Scan type <apk or ipa>")
-    parser.add_argument("-ia", dest="immuni_app_name", required=False, help="com name of the app for automatic download, or path to mobile app")
+    parser.add_argument("-is", "--immuni-scan-type", dest="immuni_scan_type", required=False, choices=["apk", "ipa"], help="Scan type <apk or ipa>")
+    parser.add_argument("-ia", "--immuni-app-name",  dest="immuni_app_name", required=False, help="com name of the app for automatic download, or path to mobile app")
     parser.add_argument("--force", dest="force_no_api", required=False, action="store_const", const=True, help="run immuniweb without an API key (Up to two scans per day)")
     
     # INTERNAL/EXTERNAL
