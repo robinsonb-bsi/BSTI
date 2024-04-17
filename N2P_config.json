@@ -39,6 +39,14 @@
             "writeup_db_id": "147020",
             "writeup_name": "Invalid X.509 (SSL/TLS) Certificate"
         },
+        "Potentially Unnecessary or Insecure Services": {
+            "ids": [
+                "10061",
+                "12218"
+            ],
+            "writeup_db_id": "214661",
+            "writeup_name": "Potentially Unnecessary or Insecure Services"
+        },
         "Software Components Out of Date and Vulnerable": {
             "ids": [
                 "100681",

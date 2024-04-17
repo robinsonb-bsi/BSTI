@@ -1,4 +1,4 @@
-# Version: 1.0.5
+# Version: 1.0.6
 # Author: Connor Fancy 
 # Inspired by: Nicolas Roux and his work on https://github.com/rouxn-bsi/reporting-toolset/tree/main/Nessus2Plextrac
 import time
@@ -14,7 +14,7 @@ import pretty_errors
 from helpers import (
     ArgumentParser, log, ArgumentValidator, PlextracHandler, RequestHandler, URLManager,
     ConfigLoader, NessusToPlextracConverter, FlawUpdater, NonCoreUpdater, 
-    DescriptionProcessor, ClientReportGen, GenConfig
+    DescriptionProcessor, ClientReportGen, GenConfig, FlawLister
 )
 
 # Disable SSL warnings
@@ -69,14 +69,17 @@ class MainEngine:
 
         :param args: Arguments passed to the program.
         """
-        # BASE_URL = f'https://{self.args.target_plextrac}.kevlar.bulletproofsi.net/api/v1'
-        # # Below will be used for v1.61
-        
+        mode_map = {
+            "internal": "internal",
+            "external": "external",
+            "webapp": "webapp",
+            "surveillance": "surveillance"
+        }
         BASE_URL = f'https://{self.args.target_plextrac}.kevlar.bulletproofsi.net/'
         self.url_manager = URLManager(self.args, BASE_URL)
         self.request_handler = RequestHandler(None)
         self.access_token = self.get_access_token()
-        self.mode = "internal" if self.args.scope == "internal" else "external"
+        self.mode = mode_map.get(self.args.scope, "internal")
         self.plextrac_handler = PlextracHandler(self.access_token, self.request_handler, self.url_manager)
         self.config = ConfigLoader.load_config(self.CONFIG_FILE)
         self.description_processor = DescriptionProcessor(self.config, self.url_manager, self.request_handler, self.mode, self.args)
@@ -94,6 +97,7 @@ class MainEngine:
 
         Note: The actual initialization depends on the arguments provided to the MainEngine class.
         """
+        self.flaw_lister = FlawLister(self.url_manager, self.request_handler)
         self.converter = NessusToPlextracConverter(self.args.directory, self.config, self.mode, self.args)
         if self.args.non_core:
             self.non_core_updater = NonCoreUpdater(self.url_manager, self.request_handler, self.args)
@@ -107,6 +111,7 @@ class MainEngine:
             ClientReportGen(self.url_manager, self.request_handler).run()
             sys.exit(0)
         self.convert_to_plextrac_format()
+        self.catalog_existing_flaws() # new method to log existing findings - hopefully preventing overwriting
         self.upload_nessus_file()
         self.upload_screenshots()
         self.process_descriptions()
@@ -117,6 +122,8 @@ class MainEngine:
         """Perform cleanup actions upon program exit."""
         log.info("Cleaning up...")
         self.cleanup_plextrac_format_file()
+        self._cleanup_file('existing_flaws.txt')
+        log.success("Cleanup complete.")
 
     def authenticate_to_plextrac(self) -> None:
         """Authenticate to the Plextrac platform."""
@@ -128,6 +135,15 @@ class MainEngine:
             self.converter.convert(self.PLEXTRAC_FORMAT_FILE)
         
         self._execute_action("Converting Nessus file to Plextrac format", convert_action)
+
+    def catalog_existing_flaws(self):
+        log.info("Cataloging existing flaws to avoid overwriting...")
+        existing_flaws = self.flaw_lister.get_existing_flaws()
+        flaws_file_path = './existing_flaws.txt'
+        with open(flaws_file_path, 'w') as f:
+            for flaw in existing_flaws:
+                f.write(f"{flaw['flaw_id']}\n")
+        log.success("Existing flaws cataloged and written to file successfully.")
 
     def upload_nessus_file(self) -> None:
         """Upload Nessus file to Plextrac."""

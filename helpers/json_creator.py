@@ -34,6 +34,14 @@ class GenConfig:
                 "writeup_db_id": "147020",
                 "guaranteed_ids": ["35291", "45411", "51192", "57582", "15901", "69551", "124410", "60108"]
             },
+            "Potentially Unnecessary or Insecure Services" : {
+            "writeup_name": "Potentially Unnecessary or Insecure Services",
+                "primary_keywords": [],
+                "secondary_keywords": [],
+                "exclude_words": [],
+                "writeup_db_id": "214661",
+                "guaranteed_ids": ["10061", "12218"]
+            },
             "Software Components Out of Date and Vulnerable": {
                 "writeup_name": "Software Components Out of Date and Vulnerable",
                 "primary_keywords": [">", "<", "Multiple vulnerabilities"],

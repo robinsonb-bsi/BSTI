@@ -15,7 +15,13 @@ class ArgumentParser:
         parser.add_argument("-p","--password", help="User's plextrac password", type=str, action="store")
         parser.add_argument("-c","--clientID", dest="client_id", help="Client ID in plextrac", action="store")
         parser.add_argument("-r","--reportID", dest="report_id", help="Report ID in plextrac", action="store")
-        parser.add_argument("-s","--scope", help="Scope/Tag to add to the imported finding (\"internal\" or \"external\")", choices=["internal", "external"], type=str, action="store")
+        parser.add_argument(
+            "-s", "--scope", 
+            help="Scope/Tag to add to the imported finding. Choose 'internal' for internal findings, 'external' for external findings, 'webapp' for web application-related findings, or 'surveillance' for surveillance-related findings.",
+            choices=["internal", "external", "webapp", "surveillance"],
+            type=str,
+            action="store"
+        )
         parser.add_argument("-d","--directory", help="Directory/Folder where to find the Nessus file[s]", type=str, action="store")
         parser.add_argument("-t","--targettedplextrac", dest='target_plextrac', help="Targetted server [report]", choices=["report"], type=str, action="store")
         parser.add_argument('-ss', '--screenshot_dir', help='Path to the directory containing the screenshots')

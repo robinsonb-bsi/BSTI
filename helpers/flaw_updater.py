@@ -31,6 +31,13 @@ class FlawUpdater:
         self.url_pattern = re.compile(r'(https?://)')
         self.html_tag_pattern = re.compile(r'<.*?>')
         self.flaw_lister = FlawLister(self.url_manager, self.request_handler)
+        mode_map = {
+            "internal": "internal",
+            "external": "external",
+            "webapp": "webapp",
+            "surveillance": "surveillance"
+        }
+        self.mode = mode_map.get(self.args.scope, "internal")
 
     
     def _load_processed_findings(self):
@@ -191,20 +198,14 @@ class FlawUpdater:
 
     def find_screenshot(self, flaw_name):
         """
-        Search for a screenshot based on the MD5 hash of the flaw name.
-
-        :param flaw_name: Name of the flaw.
-        :return: Dictionary containing file details if the screenshot is found, otherwise None.
+        Search for a screenshot based on the MD5 hash of the flaw name, adjusting names based on scope.
         """
-        
-        # Adjust the flaw_name based on scope as per nmb formatting
-        if self.args.scope == "external":
-            flaw_name = "External-" + flaw_name
+        title_prefix = self._get_title_prefix()
+        flaw_name = title_prefix + flaw_name
 
         # Convert flaw name to lowercase and compute its MD5 hash
         flaw_name_md5 = hashlib.md5(flaw_name.lower().encode()).hexdigest()
         flaw_name_md5_with_extension = flaw_name_md5 + ".png"
-
         screenshot_path = os.path.join(self.args.screenshot_dir, flaw_name_md5_with_extension)
 
         if os.path.isfile(screenshot_path):
@@ -216,8 +217,6 @@ class FlawUpdater:
             log.warning(f"No screenshot found at path '{screenshot_path}' for flaw name '{flaw_name}'")
 
         return None
-
-
 
     def upload_screenshot_to_finding(self, screenshot_bytes):
         """
@@ -315,24 +314,13 @@ class FlawUpdater:
         :param flaw_id: The ID of the flaw.
         :param custom_fields: The custom fields to update.
         """
-        # processed_findings = self._load_processed_findings()
         report_client_key = f"{self.args.report_id}-{self.args.client_id}"
 
         log.debug(f"Updating custom field for flaw ID {flaw_id}")
         
         existing_fields, title = self.get_existing_fields_for_flaw(flaw_id)
-
-        # Ugly but prevent scope crossover for now.
-        # should_skip = title in processed_findings.get(report_client_key, [])
-        should_skip = False
-        should_skip |= self.args.scope == "internal" and title.startswith("(External)")
-        should_skip |= self.args.scope == "external" and not title.startswith("(External)")
-
-        if should_skip:
-            log.info(f"Skipping finding: {title}")
-            return
         
-        modified_title = self.strip_external_prefix(title)
+        modified_title = self.strip_prefix(title)
         appropriate_custom_fields = self.get_appropriate_custom_fields(modified_title)
 
         merged_custom_fields = self.merge_custom_fields(custom_fields, appropriate_custom_fields)
@@ -342,20 +330,25 @@ class FlawUpdater:
         
         response = self.execute_graphql_query('FindingUpdate', variables)
 
-        # processed_findings.setdefault(report_client_key, []).append(title)
-        # self._save_processed_findings(processed_findings)
-        
         if response:
             log.debug(f'Custom field updated for flaw ID {flaw_id}')
 
-    def strip_external_prefix(self, title: str) -> str:
+    def strip_prefix(self, title: str) -> str:
         """
-        Remove the "(External) " prefix from the title if it exists.
+        Remove any defined prefix from the title based on the current mode.
 
         :param title: The original title string.
-        :return: The title string without the "(External) " prefix.
+        :return: The title string without the prefix.
         """
-        return title[len("(External) "):] if title.startswith("(External) ") else title
+        prefix_map = {
+            "external": "(External) ",
+            "webapp": "(WebApp) ",
+            "surveillance": "(Surveillance) ",
+            "internal": "" 
+        }
+        prefix = prefix_map.get(self.mode, "")
+        return title[len(prefix):] if title.startswith(prefix) else title
+
 
     def get_appropriate_custom_fields(self, modified_title: str) -> Dict[str, Any]:
         """
@@ -466,6 +459,7 @@ class FlawUpdater:
         try:
             response = self.request_handler.post(url, json=payload)
             if response.status_code == 200:
+                # print("DEBUG :", response.content)
                 return response.json()
             
         except requests.RequestException as e:

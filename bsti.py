@@ -1,5 +1,5 @@
 # BSTI
-# version: 1.0
+# version: 1.1
 # Authors: Connor Fancy
 
 import sys
@@ -26,6 +26,7 @@ import warnings
 import shlex
 import autopep8
 import time
+import platform
 warnings.filterwarnings("ignore", category=DeprecationWarning, 
                         message=".*sipPyTypeDict.*") # hushes annoying errors for now temp solution
 
@@ -876,7 +877,7 @@ class N2PArgsDialog(QDialog):
         self.report_id_edit.setText(default_report_id)
 
         self.scope_edit = QComboBox(self)
-        self.scope_edit.addItems(["", "internal", "external"])
+        self.scope_edit.addItems(["", "internal", "external", "web", "surveillance"])
 
         # Directory field with Browse button
         self.directory_layout = QHBoxLayout()
@@ -1044,6 +1045,28 @@ class CustomTableWidget(QTableWidget):
             if self.horizontalHeaderItem(i).text() == column_name:
                 return i
         return -1
+
+class ZeusWorker(QThread):
+    output_signal = pyqtSignal(str)
+
+    def __init__(self, command_args):
+        super().__init__()
+        self.command_args = command_args
+
+    def run(self):
+        try:
+            # Ensure stderr is also redirected to stdout
+            process = subprocess.Popen(self.command_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+            final_output = ''
+            # Live capture of output instead of waiting for process to complete
+            for line in process.stdout:
+                final_output += line
+                self.output_signal.emit(line)  # Emit signal for every line to update the GUI in real time
+            process.stdout.close()
+            process.wait()
+        except Exception as e:
+            final_output = f"Failed to run Zeus: {str(e)}"
+            self.output_signal.emit(final_output)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -1214,6 +1237,9 @@ class MainWindow(QMainWindow):
         # Add NMB tab
         self.setup_nmb_tab()
 
+        # New! added zeus tab
+        self.setup_zeus_tab()
+
         # View Logs Tab
         self.logs_tab = QWidget()
         self.logs_layout = QVBoxLayout(self.logs_tab)
@@ -1261,6 +1287,106 @@ class MainWindow(QMainWindow):
 
         # hide/show tabs based on active tab
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
+
+
+    def setup_zeus_tab(self):
+        self.zeus_tab = QWidget()
+        self.zeus_layout = QVBoxLayout(self.zeus_tab)
+
+        # Argument Layout
+        self.zeus_argument_layout = QFormLayout()
+
+        # Required Arguments
+        self.target_url_input = QLineEdit()
+        self.target_url_input.setPlaceholderText("Enter target URL (e.g., http://localhost:5000)")
+        self.project_folder_input = QLineEdit()
+        self.project_folder_input.setPlaceholderText("Enter project folder name")
+
+        # Optional Arguments
+        self.login_config_input = QLineEdit()
+        self.login_config_input.setPlaceholderText("Path to login config file (optional)")
+        self.login_config_button = QPushButton("Browse...")
+        self.login_config_button.clicked.connect(self.browse_login_config)
+
+        self.proxy_input = QLineEdit()
+        self.proxy_input.setText("squid.kevlar.bulletproofsi.net:3128")
+
+        # Layout for login config with button
+        self.login_config_layout = QHBoxLayout()
+        self.login_config_layout.addWidget(self.login_config_input)
+        self.login_config_layout.addWidget(self.login_config_button)
+
+        # Adding rows to the form
+        self.zeus_argument_layout.addRow("Target URL:", self.target_url_input)
+        self.zeus_argument_layout.addRow("Project Folder:", self.project_folder_input)
+        self.zeus_argument_layout.addRow("Login Config File:", self.login_config_layout) 
+        self.zeus_argument_layout.addRow("Proxy (optional):", self.proxy_input)
+
+        self.zeus_layout.addLayout(self.zeus_argument_layout)
+
+        # Buttons Layout
+        self.zeus_buttons_layout = QHBoxLayout()
+        self.zeus_run_button = QPushButton("Run Zeus")
+        self.zeus_run_button.setCursor(Qt.PointingHandCursor)
+        self.zeus_run_button.clicked.connect(self.execute_zeus)
+        self.zeus_buttons_layout.addWidget(self.zeus_run_button)
+        self.zeus_layout.addLayout(self.zeus_buttons_layout)
+
+        # Output Area
+        self.zeus_output = QTextEdit()
+        self.zeus_output.setReadOnly(True)
+        self.zeus_layout.addWidget(self.zeus_output)
+
+        # Add Zeus tab to the main tab widget
+        self.tab_widget.addTab(self.zeus_tab, "Zeus")
+
+
+    def execute_zeus(self):
+        self.zeus_output.clear()
+        target_url = self.target_url_input.text().strip()
+        project_folder = self.project_folder_input.text().strip()
+        login_config = self.login_config_input.text().strip()
+        proxy = self.proxy_input.text().strip()
+
+        if not target_url or not project_folder:
+            QMessageBox.warning(self, "Parameter Error", "Please provide both a target URL and a project folder.")
+            return
+
+        # Determine the correct binary based on the OS
+        os_type = platform.system().lower()
+        if os_type == "windows":
+            zeus_executable = "ZEUS.exe"
+        else:
+            zeus_executable = "./zeus"
+
+        # Check if the Zeus executable exists
+        if not os.path.exists(zeus_executable):
+            QMessageBox.warning(self, "Feature Not Implemented", "The Zeus binary does not exist on this system. This feature is not yet implemented.")
+            return
+
+        command_args = [zeus_executable, target_url, '--project-folder', project_folder]
+        if login_config:
+            command_args.extend(['--login-config', login_config])
+        if proxy:
+            command_args.extend(['--proxy', proxy])
+
+        # Create and start the worker thread
+        self.zeus_worker = ZeusWorker(command_args)
+        self.zeus_worker.output_signal.connect(self.update_zeus_output)
+        self.zeus_worker.start()
+
+
+    def browse_login_config(self):
+        fname = QFileDialog.getOpenFileName(self, 'Open file', '', "YAML files (*.yaml *.yml)")
+        if fname[0]:
+            self.login_config_input.setText(fname[0])
+
+
+    def update_zeus_output(self, text):
+        self.zeus_output.moveCursor(QTextCursor.End)
+        self.zeus_output.insertPlainText(text)
+        self.zeus_output.moveCursor(QTextCursor.End)
+
 
     def delete_drone(self):
         config = load_config()
@@ -1479,15 +1605,12 @@ class MainWindow(QMainWindow):
                     table = self.create_table_from_dataframe(df)
                     layout.addWidget(table)
             elif file_name.lower().endswith('.json'):
-                # Display JSON in a QTextEdit with pretty formatting
                 with open(file_name, 'r') as file:
                     content = file.read()
                     try:
-                        # Parse and pretty-print JSON
                         parsed_json = json.loads(content)
                         pretty_json = json.dumps(parsed_json, indent=4, sort_keys=True)
                     except json.JSONDecodeError:
-                        # In case of JSON decode error, use original content
                         pretty_json = content
 
                 text_edit = QTextEdit()
@@ -1496,7 +1619,6 @@ class MainWindow(QMainWindow):
                 layout.addWidget(text_edit)
             elif file_name.lower().endswith('.html'):
                 try:
-                    # Display HTML in a QWebEngineView
                     web_view = QWebView()
                     web_view.load(QUrl.fromLocalFile(os.path.abspath(file_name)))
                     layout.addWidget(web_view)
@@ -1504,7 +1626,6 @@ class MainWindow(QMainWindow):
                     print("ERROR:", e) 
 
             self.tab_widget.addTab(tab, os.path.basename(file_name))
-            # Add close button to the tab
             close_button = QPushButton()
             close_button.setIcon(self.style().standardIcon(QStyle.SP_DockWidgetCloseButton))
             close_button.setStyleSheet(CLOSE_BUTTON_STYLE)
@@ -1694,6 +1815,7 @@ class MainWindow(QMainWindow):
         try:
             if self.nmb_thread:
                 self.nmb_thread.pause()
+                self.nmb_output.append("NMB paused.")
         except AttributeError:
             QMessageBox.warning(self, "Error", "NMB is not running")
         else:
@@ -1826,13 +1948,13 @@ class MainWindow(QMainWindow):
 
 
     def execute_nmb(self):
+        self.execute_nmb_button.setDisabled(True)
+        self.nmb_output.clear() 
         host, username, password = self.get_current_drone_connection()
 
-        # Construct command as a list of arguments
         mode = self.mode_combobox.currentText()
         command_args = ["python", "nmb.py", "-m", mode, "-u", username, "-p", password, "-d", host]
 
-        # Add other arguments from the form
         for arg, widget in self.argument_fields.items():
             if isinstance(widget, QLineEdit):
                 value = widget.text().strip()
@@ -1845,14 +1967,14 @@ class MainWindow(QMainWindow):
                 if value:
                     command_args.extend(["--" + arg, value])
 
-        # Clear existing output
-        self.nmb_output.clear()
-
-        # Create and start the thread
         self.nmb_thread = NMBRunnerThread(command_args)
         self.nmb_thread.output_signal.connect(self.update_output)
+        self.nmb_thread.finished.connect(self.on_thread_complete)
         self.nmb_thread.start()
 
+    def on_thread_complete(self):
+        self.execute_nmb_button.setEnabled(True)
+        self.nmb_output.append("NMB process completed.")
 
     def update_output(self, text):
         self.nmb_output.append(text)

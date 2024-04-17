@@ -13,3 +13,4 @@ from .non_core_updater import NonCoreUpdater
 from .desc_updater import DescriptionProcessor
 from .client_generator import ClientReportGen
 from .json_creator import GenConfig
+from .flaw_lister import FlawLister

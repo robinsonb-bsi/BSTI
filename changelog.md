@@ -22,3 +22,9 @@
 - pause button for nmb
 - metadata for modules to map to nessus findings, then convert to md5 when saving the screenshot
 - plugin_manager and create report functionality added
+# v1.1
+- fixed n2p import issue 
+- added survilence and webapp tags 
+- started zeus integration 
+- added prefixes to survilence and webapp => prevents flawID from duplicating
+- Potentially Unnecessary or Insecure Services added as plugin category

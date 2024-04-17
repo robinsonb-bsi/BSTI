@@ -461,6 +461,7 @@ class Nessus:
                 uploaded_filename = json.loads(response.text)["fileuploaded"]
             
             uuid = self.token_keys["scan_uuid"]
+            
 
             # send "create scan" request
             data = {

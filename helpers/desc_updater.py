@@ -67,6 +67,7 @@ class DescriptionProcessor:
             response = self.request_handler.post(url, json=payload)
             if response.status_code == 200:
                 log.debug(f'Update complete {flaw_id}')
+                # print("DEBUG UPDATE DISC:", response.content)
                 return True
             else:
                 log.error(f'Update failed for flaw: {flaw_id}')
@@ -76,19 +77,40 @@ class DescriptionProcessor:
             log.error(f"Error occurred while trying to update the description for flaw ID {flaw_id}: {str(e)}")
             print(response.content)
             return False
+        
+    def _get_title_prefix(self) -> str:
+        """
+        Get the appropriate title prefix based on the mode to ensure uniqueness and context clarity.
+
+        Modes and their prefixes:
+        - "external": Prefixes with "(External)"
+        - "webapp": Prefixes with "(WebApp)"
+        - "surveillance": Prefixes with "(Surveillance)"
+        - Other/internal: No prefix
+
+        :return: Title prefix as a string.
+        """
+        prefix_map = {
+            "external": "(External) ",
+            "webapp": "(WebApp) ",
+            "surveillance": "(Surveillance) ",
+            "internal": ""
+        }
+        return prefix_map.get(self.mode, "")
+
 
     def process(self) -> None:
         """
         Process each flaw, update its description and recommendation if it matches a writeup_db entry.
         """
         flaws = self.flaw_lister.list_flaws()
-        external_prefix = "(External) " if self.mode == "external" else "" # handles if flaw name has external prefix 
+        title_prefix = self._get_title_prefix()
         
         for flaw in flaws:
             flaw_name = flaw["title"]
             
             for category, details in self.config["plugins"].items():
-                adjusted_writeup_name = external_prefix + details["writeup_name"]
+                adjusted_writeup_name = title_prefix + details["writeup_name"]
                 
                 if flaw_name == adjusted_writeup_name:
                     writeup_id = details["writeup_db_id"]
@@ -97,5 +119,5 @@ class DescriptionProcessor:
                     if writeup_details:
                         description = writeup_details.get("description", "")
                         recommendation = writeup_details.get("recommendations", "")
-                        referances = writeup_details.get("references", "")
-                        self.update_flaw_description(flaw["id"], description, recommendation, referances)
+                        references = writeup_details.get("references", "")
+                        self.update_flaw_description(flaw["id"], description, recommendation, references)

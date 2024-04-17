@@ -26,6 +26,13 @@ class NessusToPlextracConverter:
         self.merged_plugin_ids = set()
         self.organized_descriptions = {}
 
+        self.tag_map = {
+            "internal": "internal_finding",
+            "external": "external_finding",
+            "surveillance": "surveillance_finding",
+            "webapp": "webapp_finding"
+        }
+
     def build_plugin_categories(self) -> Dict[str, str]:
         """
         Build a mapping of plugin categories from the configuration.
@@ -154,17 +161,39 @@ class NessusToPlextracConverter:
         """
         Get the appropriate tag based on the mode.
 
+        Modes and their corresponding tags:
+        - "internal": "internal_finding"
+        - "external": "external_finding"
+        - "surveillance": "surveillance_finding"
+        - "webapp": "webapp_finding"
+
         :return: Tag as a string.
         """
-        return "internal_finding" if self.mode == "internal" else "external_finding"
+        
+        # Default to "internal_finding" if mode is not recognized
+        return self.tag_map.get(self.mode, "internal_finding")
+
 
     def _get_title_prefix(self) -> str:
         """
-        Get the appropriate title prefix based on the mode.
+        Get the appropriate title prefix based on the mode to ensure uniqueness and context clarity.
+
+        Modes and their prefixes:
+        - "external": Prefixes with "(External)"
+        - "webapp": Prefixes with "(WebApp)"
+        - "surveillance": Prefixes with "(Surveillance)"
+        - Other/internal: No prefix
 
         :return: Title prefix as a string.
         """
-        return "(External) " if self.mode == "external" else ""
+        prefix_map = {
+            "external": "(External) ",
+            "webapp": "(WebApp) ",
+            "surveillance": "(Surveillance) ",
+            "internal": ""
+        }
+        return prefix_map.get(self.mode, "")
+
 
     def _format_text(self, text: str) -> str:
         """

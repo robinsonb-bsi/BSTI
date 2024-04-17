@@ -23,3 +23,7 @@ __pycache__
 eyewitness_output.zip
 *.pdf
 *.xlsx
+*.xapk
+/Archives
+/items
+ZEUS.exe
