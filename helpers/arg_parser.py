@@ -18,7 +18,7 @@ class ArgumentParser:
         parser.add_argument(
             "-s", "--scope", 
             help="Scope/Tag to add to the imported finding. Choose 'internal' for internal findings, 'external' for external findings, 'webapp' for web application-related findings, or 'surveillance' for surveillance-related findings.",
-            choices=["internal", "external", "webapp", "surveillance"],
+            choices=["internal", "external", "web", "surveillance"],
             type=str,
             action="store"
         )

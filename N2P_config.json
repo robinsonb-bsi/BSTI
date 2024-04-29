@@ -47,6 +47,13 @@
             "writeup_db_id": "214661",
             "writeup_name": "Potentially Unnecessary or Insecure Services"
         },
+        "Default Credentials": {
+            "ids": [
+                "106462"
+            ],
+            "writeup_db_id": "255978",
+            "writeup_name": "Default Credentials"
+        },
         "Software Components Out of Date and Vulnerable": {
             "ids": [
                 "100681",
@@ -9913,7 +9920,13 @@
                 "501375",
                 "501392",
                 "501400",
-                "501403"
+                "501403",
+                "183776",
+                "190601",
+                "184129",
+                "184357",
+                "159491",
+                "187201"
             ],
             "writeup_db_id": "12430",
             "writeup_name": "Software Components Out of Date and Vulnerable"

@@ -72,7 +72,7 @@ class MainEngine:
         mode_map = {
             "internal": "internal",
             "external": "external",
-            "webapp": "webapp",
+            "web": "web",
             "surveillance": "surveillance"
         }
         BASE_URL = f'https://{self.args.target_plextrac}.kevlar.bulletproofsi.net/'

@@ -42,6 +42,14 @@ class GenConfig:
                 "writeup_db_id": "214661",
                 "guaranteed_ids": ["10061", "12218"]
             },
+            "Default Credentials" : {
+            "writeup_name": "Default Credentials",
+                "primary_keywords": [],
+                "secondary_keywords": [],
+                "exclude_words": [],
+                "writeup_db_id": "255978",
+                "guaranteed_ids": ["106462"]
+            },
             "Software Components Out of Date and Vulnerable": {
                 "writeup_name": "Software Components Out of Date and Vulnerable",
                 "primary_keywords": [">", "<", "Multiple vulnerabilities"],

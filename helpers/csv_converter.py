@@ -30,7 +30,7 @@ class NessusToPlextracConverter:
             "internal": "internal_finding",
             "external": "external_finding",
             "surveillance": "surveillance_finding",
-            "webapp": "webapp_finding"
+            "web": "webapp_finding"
         }
 
     def build_plugin_categories(self) -> Dict[str, str]:
@@ -165,7 +165,7 @@ class NessusToPlextracConverter:
         - "internal": "internal_finding"
         - "external": "external_finding"
         - "surveillance": "surveillance_finding"
-        - "webapp": "webapp_finding"
+        - "web": "webapp_finding"
 
         :return: Tag as a string.
         """
@@ -180,7 +180,7 @@ class NessusToPlextracConverter:
 
         Modes and their prefixes:
         - "external": Prefixes with "(External)"
-        - "webapp": Prefixes with "(WebApp)"
+        - "web": Prefixes with "(Web)"
         - "surveillance": Prefixes with "(Surveillance)"
         - Other/internal: No prefix
 
@@ -188,7 +188,7 @@ class NessusToPlextracConverter:
         """
         prefix_map = {
             "external": "(External) ",
-            "webapp": "(WebApp) ",
+            "web": "(Web) ",
             "surveillance": "(Surveillance) ",
             "internal": ""
         }

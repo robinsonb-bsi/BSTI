@@ -84,7 +84,7 @@ class DescriptionProcessor:
 
         Modes and their prefixes:
         - "external": Prefixes with "(External)"
-        - "webapp": Prefixes with "(WebApp)"
+        - "web": Prefixes with "(WebApp)"
         - "surveillance": Prefixes with "(Surveillance)"
         - Other/internal: No prefix
 
@@ -92,7 +92,7 @@ class DescriptionProcessor:
         """
         prefix_map = {
             "external": "(External) ",
-            "webapp": "(WebApp) ",
+            "web": "(Web) ",
             "surveillance": "(Surveillance) ",
             "internal": ""
         }

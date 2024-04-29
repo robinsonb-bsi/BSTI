@@ -5,7 +5,7 @@
 import sys
 import os
 import pandas as pd
-from PyQt5.QtWidgets import (QApplication, QCompleter, QMenu, QInputDialog, QDialogButtonBox, QTableWidget, QTableWidgetItem, QCheckBox, QLabel, QAction, QTabBar, QStyle, QPlainTextEdit, QMainWindow, QGridLayout, QHBoxLayout, QTabWidget, QTextEdit, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QDialog, QLineEdit, QFormLayout, QMessageBox, QComboBox)
+from PyQt5.QtWidgets import (QApplication, QCompleter, QListWidget, QSplitter, QMenu, QInputDialog, QDialogButtonBox, QTableWidget, QTableWidgetItem, QCheckBox, QLabel, QAction, QTabBar, QStyle, QPlainTextEdit, QMainWindow, QGridLayout, QHBoxLayout, QTabWidget, QTextEdit, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QDialog, QLineEdit, QFormLayout, QMessageBox, QComboBox)
 from PyQt5.QtCore import QThread, pyqtSignal, QUrl, QRegExp, Qt, QProcess
 from PyQt5.QtGui import QTextCursor, QFont, QSyntaxHighlighter, QTextCharFormat, QColor, QDesktopServices
 from PyQt5.QtWebKitWidgets import QWebView
@@ -1055,13 +1055,11 @@ class ZeusWorker(QThread):
 
     def run(self):
         try:
-            # Ensure stderr is also redirected to stdout
             process = subprocess.Popen(self.command_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
             final_output = ''
-            # Live capture of output instead of waiting for process to complete
             for line in process.stdout:
                 final_output += line
-                self.output_signal.emit(line)  # Emit signal for every line to update the GUI in real time
+                self.output_signal.emit(line)
             process.stdout.close()
             process.wait()
         except Exception as e:
@@ -1287,6 +1285,10 @@ class MainWindow(QMainWindow):
 
         # hide/show tabs based on active tab
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
+        
+    def open_policy_wizard(self):
+        wizard = PolicyWizard(self)
+        wizard.exec_()
 
 
     def setup_zeus_tab(self):
@@ -1323,6 +1325,11 @@ class MainWindow(QMainWindow):
         self.zeus_argument_layout.addRow("Proxy (optional):", self.proxy_input)
 
         self.zeus_layout.addLayout(self.zeus_argument_layout)
+        
+        # Policy Wizard Button
+        self.policy_wizard_button = QPushButton("Open Policy Wizard")
+        self.policy_wizard_button.clicked.connect(self.open_policy_wizard)
+        self.zeus_layout.addWidget(self.policy_wizard_button)
 
         # Buttons Layout
         self.zeus_buttons_layout = QHBoxLayout()
@@ -2826,6 +2833,179 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.information(self, "Error", f"Unable to capture screenshot: {e}")
 
+
+class JobConfig:
+    def __init__(self, job_type, parameters):
+        self.job_type = job_type
+        self.parameters = parameters
+
+    def __repr__(self):
+        return f"{self.job_type}: {self.parameters}"
+
+class PolicyWizard(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Policy Wizard')
+        self.setGeometry(200, 200, 1400, 1100)
+        self.jobs = []
+        self.user_creds = []
+        self.init_ui()
+
+    def init_ui(self):
+        self.layout = QVBoxLayout(self)
+        self.setup_context_inputs()
+        self.setup_user_inputs()
+        self.setup_job_tabs()
+        self.job_list_widget = QListWidget()
+        self.job_list_widget.setMinimumHeight(200)
+        self.layout.addWidget(self.job_list_widget)
+        self.setup_buttons()
+        self.yaml_output = QTextEdit()
+        self.yaml_output.setPlaceholderText("Generated YAML will appear here...")
+        self.layout.addWidget(self.yaml_output)
+
+    def setup_context_inputs(self):
+        form_layout = QFormLayout()
+        self.context_name_input = QLineEdit()
+        self.login_page_url_input = QLineEdit()
+        self.login_page_wait_input = QLineEdit("5")  # default value
+        self.browser_id_input = QLineEdit("firefox-headless")  # default value
+
+        form_layout.addRow("Context Name:", self.context_name_input)
+        form_layout.addRow("Login Page URL:", self.login_page_url_input)
+        form_layout.addRow("Login Page Wait (seconds):", self.login_page_wait_input)
+        form_layout.addRow("Browser ID:", self.browser_id_input)
+        
+        self.layout.addLayout(form_layout)
+
+    def setup_user_inputs(self):
+        user_layout = QFormLayout()
+        self.user_name_input = QLineEdit()
+        self.username_input = QLineEdit()
+        self.password_input = QLineEdit()
+        self.add_user_button = QPushButton("Add User")
+        self.add_user_button.clicked.connect(self.add_user)
+
+        user_layout.addRow("User Name:", self.user_name_input)
+        user_layout.addRow("Username:", self.username_input)
+        user_layout.addRow("Password:", self.password_input)
+        user_layout.addRow(self.add_user_button)
+
+        self.layout.addLayout(user_layout)
+
+    def add_user(self):
+        name = self.user_name_input.text()
+        username = self.username_input.text()
+        password = self.password_input.text()
+        if name and username and password:
+            self.user_creds.append({'name': name, 'credentials': {'username': username, 'password': password}})
+            self.job_list_widget.addItem(f"User: {name} - Username: {username}")
+            self.user_name_input.clear()
+            self.username_input.clear()
+            self.password_input.clear()
+        else:
+            QMessageBox.warning(self, "Warning", "All user fields must be filled.")
+
+    def generate_yaml(self):
+        context_name = self.context_name_input.text()
+        login_page_url = self.login_page_url_input.text()
+        login_page_wait = self.login_page_wait_input.text()
+        browser_id = self.browser_id_input.text()
+
+        user_section = "\n".join([f"    - name: \"{user['name']}\"\n      credentials:\n        username: \"{user['credentials']['username']}\"\n        password: \"{user['credentials']['password']}\"" for user in self.user_creds])
+
+        yaml_template = f"""
+env:
+  contexts:
+  - name: "{context_name}"
+    urls:
+      - "{{{{baseURL}}}}"
+    authentication:
+      method: "browser"
+      parameters:
+        loginPageUrl: "{login_page_url}"
+        loginPageWait: {login_page_wait}
+        browserId: "{browser_id}"
+      verification:
+        method: "autodetect"
+    sessionManagement:
+      method: "autodetect"
+    users:
+{user_section}
+jobs:
+{self.format_jobs()}
+"""
+        self.yaml_output.setText(yaml_template)
+
+    def format_jobs(self):
+        job_entries = []
+        for job in self.jobs:
+            formatted_parameters = '\n      '.join([line.strip() for line in job.parameters.split('\n')])
+            job_entry = f"  - type: {job.job_type}\n    parameters:\n      {formatted_parameters}"
+            job_entries.append(job_entry)
+        return '\n'.join(job_entries)
+
+    def setup_job_tabs(self):
+        self.job_tabs = QTabWidget()
+        job_details = {
+            "activeScan": "MaxRuleDurationInMins: 0\nMaxScanDurationInMins: 0\nDelayInMs: 0\nThreadPerHost: 2",
+            "report": "Template: modern\nReportDir: {{reportDir}}\nReportFile: report-name\nReportTitle: 'report sample'",
+            "spider": "MaxDepth: 5\nMaxChildren: 10\nAcceptCookies: true",
+            "passiveScan-wait": "MaxDuration: 5",
+            "requestor": "User: admin\nURL: {{baseURL}}/protected\nMethod: GET\nResponse Code: 200",
+            "script": "action:add, remove, run, enable, disable\ntype: targeted OR standalone\nengine: jython\nname: some_script_name\nfile:/full/path/to/script\ntarget:{{baseURL}}/somepath"
+        }
+        for job_type, details in job_details.items():
+            self.add_job_tab(job_type, details)
+        self.layout.addWidget(self.job_tabs)
+
+    def add_job_tab(self, job_type, description):
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        description_label = QLabel(description)
+        description_label.setWordWrap(True)
+        description_label.setStyleSheet("QLabel { font-weight: bold; color: #555; }")
+
+        param_input = QTextEdit()
+        param_input.setPlaceholderText("Enter your parameters here.")
+
+        prefill_button = QPushButton("Load Defaults")
+        prefill_button.clicked.connect(lambda: param_input.setText(description))
+
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.addWidget(description_label)
+        splitter.addWidget(param_input)
+        splitter.addWidget(prefill_button)
+        splitter.setSizes([150, 300, 100])
+
+        layout.addWidget(splitter)
+        self.job_tabs.addTab(widget, job_type)
+
+    def setup_buttons(self):
+        self.add_job_button = QPushButton('Add Job')
+        self.add_job_button.clicked.connect(self.add_job)
+        self.generate_button = QPushButton('Generate YAML')
+        self.generate_button.clicked.connect(self.generate_yaml)
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addWidget(self.add_job_button)
+        buttons_layout.addWidget(self.generate_button)
+        self.layout.addLayout(buttons_layout)
+
+    def add_job(self):
+        current_widget = self.job_tabs.currentWidget().findChild(QTextEdit)
+        parameters = current_widget.toPlainText()
+        job_type = self.job_tabs.tabText(self.job_tabs.currentIndex())
+        if parameters.strip():
+            self.jobs.append(JobConfig(job_type.lower(), parameters))
+            self.job_list_widget.addItem(f"{job_type}: {parameters}")
+            current_widget.clear()
+        else:
+            QMessageBox.warning(self, "Warning", "Parameters cannot be empty.")
+
+
+
+
+
 if __name__ == "__main__":
     try:
         app = QApplication(sys.argv)
@@ -2835,3 +3015,4 @@ if __name__ == "__main__":
         sys.exit(app.exec_())
     except:
         pass # don't handle the exceptions here
+

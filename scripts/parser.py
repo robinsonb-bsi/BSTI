@@ -30,9 +30,6 @@ class ConfigParser:
     def _get_last_modified_time(self):
         """
         Get the last modified time of the 'config.json' file.
-
-        Returns:
-        - Last modified time of the 'config.json' file in seconds since the epoch.
         """
         return os.path.getmtime(self.json_config)
 

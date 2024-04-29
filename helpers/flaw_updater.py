@@ -34,7 +34,7 @@ class FlawUpdater:
         mode_map = {
             "internal": "internal",
             "external": "external",
-            "webapp": "webapp",
+            "web": "web",
             "surveillance": "surveillance"
         }
         self.mode = mode_map.get(self.args.scope, "internal")
@@ -342,7 +342,7 @@ class FlawUpdater:
         """
         prefix_map = {
             "external": "(External) ",
-            "webapp": "(WebApp) ",
+            "web": "(Web) ",
             "surveillance": "(Surveillance) ",
             "internal": "" 
         }
