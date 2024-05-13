@@ -5,10 +5,6 @@
   </h1>
 </div>
 </h1>
-
-<p align="center">
-Bulletproof Solutions Testing Interface
-</p>
 </div>
 
 ---
