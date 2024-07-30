@@ -1079,7 +1079,9 @@ class MainWindow(QMainWindow):
         self.report_id = None
         self.nessus_findings_map = {}
         self.setWindowTitle("Bulletproof Solutions Testing Interface")
-        self.setGeometry(100, 100, 2200, 1200)
+        screen_size = app.primaryScreen()
+        display_size = screen_size.availableGeometry()
+        self.setGeometry(display_size)
         self.threads = []
 
         self.layout = QVBoxLayout()
