@@ -2,13 +2,15 @@ import csv
 import json
 import re
 import os
+import requests
 from collections import defaultdict
 
 class Interpreter:
-    UNWANTED_STRINGS = {".org", ".io", ".js", ".com", ",", "\"", "\'", ":*", ".png", "css", ".net", ".ico"}
+    UNWANTED_STRINGS = {".org", "localhost", "ipaddress", ".io", ".js", ".com", ",", "\"", "\'", ":*", ".png", "css", ".net", ".ico"}
     SERVICE_DETECT_KEYWORDS = {'Service Detect', 'SQL Server', 'Server Detect'}
     FQDN_PATTERN = re.compile(r'(?:FQDN\s+:\s+|Common name:|CN[:=])(?![^|/\n]*\*)([^|/\n]+)')
     HTTP_PATTERN = re.compile(r'https?://\S+')
+    CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/csv/known_exploited_vulnerabilities.csv"
 
     def __init__(self, csv_file, client_dir):
         self.csv_file = csv_file
@@ -16,6 +18,7 @@ class Interpreter:
         self.output_file = 'Interpreter_output.html'
         self.output_path = os.path.join(self.client_dir, self.output_file)
         self.mindmap_data = self.read_mindmap_json()
+        self.cisa_kev_data = self.download_and_parse_cisa_kev()
         self.generate_html_output()
 
     @staticmethod
@@ -23,28 +26,27 @@ class Interpreter:
         with open("mindmap.json", 'r', encoding='utf-8') as file:
             return json.load(file)
 
-    def read_csv_and_collect_info(self):
-        nessus_data = defaultdict(lambda: defaultdict(list))
-        os_info = {}
-        basic_host_info = defaultdict(list)
-        dns_hostnames = {}
-        vulnerability_info = defaultdict(list)
-        http_info = defaultdict(list)
+    def download_and_parse_cisa_kev(self):
+        # Download the CISA KEV CSV file
+        response = requests.get(self.CISA_KEV_URL)
+        cisa_kev_csv = os.path.join(self.client_dir, "known_exploited_vulnerabilities.csv")
+        with open(cisa_kev_csv, 'wb') as file:
+            file.write(response.content)
 
-        with open(self.csv_file, 'r', encoding='utf-8') as file:
+        # Parse the CISA KEV CSV file
+        cisa_kev_data = {}
+        with open(cisa_kev_csv, 'r', encoding='utf-8') as file:
             reader = csv.DictReader(file)
             for row in reader:
-                self.collect_nessus_data(row, nessus_data)
-                self.collect_os_info(row, os_info)
-                self.collect_basic_host_info(row, basic_host_info)
-                self.collect_dns_hostnames(row, dns_hostnames)
-                self.collect_vulnerability_info(row, vulnerability_info)
-                self.collect_http_info(row, http_info)
-
-        # Filter HTTP info
-        self.filter_http_info(http_info)
-
-        return nessus_data, os_info, basic_host_info, dns_hostnames, vulnerability_info, http_info
+                cve_id = row['cveID']
+                cisa_kev_data[cve_id] = {
+                    "vulnerabilityName": row.get('vulnerabilityName', 'NA'),
+                    "vendorProject": row.get('vendorProject', 'NA'),
+                    "product": row.get('product', 'NA'),
+                    "shortDescription": row.get('shortDescription', 'NA'),
+                    "notes": row.get('notes', 'NA'),
+                }
+        return cisa_kev_data
 
     def collect_nessus_data(self, row, nessus_data):
         name = row['Name']
@@ -55,6 +57,31 @@ class Interpreter:
             output_to_use = name if not plugin_output or len(plugin_output) > 110 else plugin_output
             if port.isdigit():
                 nessus_data[output_to_use][int(port)].append(host)
+
+    def read_csv_and_collect_info(self):
+        nessus_data = defaultdict(lambda: defaultdict(list))
+        os_info = {}
+        basic_host_info = defaultdict(list)
+        dns_hostnames = {}
+        vulnerability_info = defaultdict(list)
+        http_info = defaultdict(list)
+        known_exploitable_vulns = defaultdict(list)
+
+        with open(self.csv_file, 'r', encoding='utf-8') as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                self.collect_nessus_data(row, nessus_data)
+                self.collect_os_info(row, os_info)
+                self.collect_basic_host_info(row, basic_host_info)
+                self.collect_dns_hostnames(row, dns_hostnames)
+                self.collect_vulnerability_info(row, vulnerability_info)
+                self.collect_http_info(row, http_info)
+                self.collect_known_exploitable_vulns(row, known_exploitable_vulns)
+
+        # Filter HTTP info
+        self.filter_http_info(http_info)
+
+        return nessus_data, os_info, basic_host_info, dns_hostnames, vulnerability_info, http_info, known_exploitable_vulns
 
     def collect_os_info(self, row, os_info):
         if row['Name'] == 'OS Identification':
@@ -88,6 +115,13 @@ class Interpreter:
         plugin_output = row['Plugin Output']
         if 'http://' in plugin_output or 'https://' in plugin_output:
             http_info[row['Host']].extend(self.HTTP_PATTERN.findall(plugin_output))
+
+    def collect_known_exploitable_vulns(self, row, known_exploitable_vulns):
+        cve = row.get('CVE', 'N/A')
+        if cve in self.cisa_kev_data:
+            vuln_info = self.cisa_kev_data[cve]
+            host = row['Host']
+            known_exploitable_vulns[cve].append((vuln_info, host))
 
     @classmethod
     def filter_http_info(cls, http_info):
@@ -124,24 +158,24 @@ class Interpreter:
         bash_script = bash_script.replace("{urls}", urls)
         return bash_script
 
-
     def generate_html_output(self):
-        # this is messy but im lazy at the moment 
-        nessus_data, os_info, basic_host_info, dns_hostnames, vulnerability_info, http_info = self.read_csv_and_collect_info()
+        nessus_data, os_info, basic_host_info, dns_hostnames, vulnerability_info, http_info, known_exploitable_vulns = self.read_csv_and_collect_info()
         mindmap_data = self.read_mindmap_json()
 
-        # Initial HTML content
-        html_content = """
+        # Start collecting HTML content
+        html_content = []
+
+        # Initial HTML structure
+        html_content.append("""
         <html>
         <head>
-            <title>Interpreter (v1)</title>
+            <title>Interpreter</title>
             <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css">
             <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
             <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
             <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
             <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
             <style>
-                /* Dark mode styles */
                 body {
                     background-color: #121212;
                     color: #ffffff;
@@ -152,7 +186,8 @@ class Interpreter:
                     padding: 0;
                 }
                 .container {
-                    max-width: 1200px;
+                    width: 90%;
+                    max-width: 100%;
                     margin: 0 auto;
                     padding: 20px;
                 }
@@ -178,7 +213,7 @@ class Interpreter:
                     background-color: #444;
                     text-align: left;
                 }
-                .collapsible-service, .collapsible-service, .collapsible-vulnerability {
+                .collapsible-service, .collapsible-vulnerability {
                     background-color: #555;
                     color: #fff;
                     cursor: pointer;
@@ -190,20 +225,20 @@ class Interpreter:
                     text-align: left;
                     margin-bottom: 5px;
                 }
-                .content-service, .content-service, .content-vulnerability {
+                .content-service, .content-vulnerability {
                     padding: 0 10px;
                     display: none;
                     overflow: hidden;
                     background-color: #666;
                     text-align: left;
                 }
-                .ip-address, .ip-address, .ip-address {
+                .ip-address {
                     padding-left: 20px;
                     list-style-type: square;
                 }
                 textarea {
                     width: 100%;
-                    min-height: 100px; /* Increase the height here */
+                    min-height: 100px;
                 }
                 .hidden {
                     display: none;
@@ -217,33 +252,29 @@ class Interpreter:
                     margin-right: 10px;
                 }
                 .host-info-item {
-                    display: flex; /* Use flexbox for horizontal layout */
-                    justify-content: space-between; /* Space items evenly */
-                    align-items: center; /* Center items vertically */
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
                 }
                 .host-entry {
                     display: flex;
                     justify-content: space-between;
                     padding: 0px 0;
                 }
-
                 .host-entry .host-ip, .host-entry .host-os, .host-entry .host-dns {
                     padding: 0 10px;
                 }
-
                 .host-entry .host-ip {
                     text-align: left;
-                    flex-basis: 20%;  /* example: allocate 20% width to IP */
+                    flex-basis: 20%;
                 }
-
                 .host-entry .host-os {
                     text-align: left;
-                    flex-basis: 40%;  /* example: allocate 40% width to OS */
+                    flex-basis: 40%;
                 }
-
                 .host-entry .host-dns {
                     text-align: right;
-                    flex-basis: 40%;  /* example: allocate 40% width to DNS */
+                    flex-basis: 40%;
                 }
             </style>
         </head>
@@ -252,56 +283,70 @@ class Interpreter:
                 <h1>Interpreter</h1>
                 <button id='expandAll' onclick='expandAllSections()'>Expand All</button>
                 <button id='collapseAll' onclick='collapseAllSections()'>Collapse All</button>
-        """
+        """)
 
-        # Include Basic Host Information with DNS hostnames
-        html_content += "<div class='collapsible-container'>"
-        html_content += "<div class='collapsible' onclick='toggleContent(this)'><span class='service'><strong>Host Info</strong></span><span class='icons'><span class='expand-button'></span><span class='collapse-button'></span></span></div>"
-        html_content += "<div class='content'>"
-
-        # Sorting the basic host information based on OS description
-        sorted_basic_host_info = sorted(basic_host_info.items(), key=lambda x: os_info.get(x[0], ''))
-        for host, ports in sorted_basic_host_info:
+        # Group hosts by OS
+        hosts_by_os = defaultdict(list)
+        for host, ports in basic_host_info.items():
             os_description = os_info.get(host, 'Unknown OS')
-            # Include DNS hostname, if available
             dns_hostname = dns_hostnames.get(host, '')
+            hosts_by_os[os_description].append({
+                "host": host,
+                "ports": ports,
+                "dns_hostname": dns_hostname
+            })
 
-            html_content += "<div class='collapsible-container-service'>"
-            html_content += "<div class='collapsible-service' onclick='toggleContentService(this)'>"
-            html_content += "<div class='host-entry'>"
-            html_content += f"<span class='host-ip'>{host}</span>"
-            html_content += f"<span class='host-os'>{os_description}</span>"
-            html_content += f"<span class='host-dns'>{dns_hostname}</span>"
-            html_content += "</div>"
-            html_content += "<span class='icons'><span class='expand-button'></span><span class='collapse-button'></span></span></div>"
-            html_content += "<div class='content-service'>"
-            html_content += f"<p><strong class='service'>Ports: {', '.join(map(str, ports))}</strong></p>"
+        # Sort the OS descriptions alphabetically
+        sorted_os_descriptions = sorted(hosts_by_os.keys())
 
-            
-            # Add links and notes from mindmap for each host
-            for port in ports:
-                port_data = mindmap_data.get(str(port))
-                if port_data:
-                    link = port_data.get('Link')
-                    notes = port_data.get('Notes')
-                    if link:
-                        # Split multiple links by newline character and display them separately
-                        links = link.split('\n')
-                        for link_item in links:
-                            # Display "Port X:" before each hyperlink
-                            html_content += f"<p><strong>Port {port}:</strong> <a href='{link_item.strip()}' target='_blank'>{link_item.strip()}</a></p>"
-                    if notes:
-                        html_content += f"<p><strong>Notes:</strong> {notes}</p>"
+        # Include grouped host information by OS
+        html_content.append("<div class='collapsible-container'>")
+        html_content.append("<div class='collapsible' onclick='toggleContent(this)'><span class='service'><strong>Host Info</strong></span><span class='icons'><span class='expand-button'></span><span class='collapse-button'></span></span></div>")
+        html_content.append("<div class='content'>")
 
-            html_content += "</div></div>"
+        for os_description in sorted_os_descriptions:
+            hosts = hosts_by_os[os_description]
+            html_content.append(f"<div class='collapsible-container-service'><div class='collapsible-service' onclick='toggleContentService(this)'><span class='service'><strong>{os_description}</strong></span><span class='icons'><span class='expand-button'></span><span class='collapse-button'></span></span></div>")
+            html_content.append("<div class='content-service'>")
 
-        html_content += "</div></div>"
+            for host_info in hosts:
+                host = host_info['host']
+                ports = host_info['ports']
+                dns_hostname = host_info['dns_hostname']
+
+                html_content.append("<div class='collapsible-container-service'>")
+                html_content.append("<div class='collapsible-service' onclick='toggleContentService(this)'>")
+                html_content.append("<div class='host-entry'>")
+                html_content.append(f"<span class='host-ip'>{host}</span>")
+                html_content.append(f"<span class='host-dns'>{dns_hostname}</span>")
+                html_content.append("</div>")
+                html_content.append("<span class='icons'><span class='expand-button'></span><span class='collapse-button'></span></span></div>")
+                html_content.append("<div class='content-service'>")
+                html_content.append(f"<p><strong class='service'>Ports: {','.join(map(str, ports))}</strong></p>")
+
+                for port in ports:
+                    port_data = mindmap_data.get(str(port))
+                    if port_data:
+                        link = port_data.get('Link')
+                        # notes = port_data.get('Notes')
+                        if link:
+                            links = link.split('\n')
+                            for link_item in links:
+                                html_content.append(f"<p><strong>Port {port}:</strong> <a href='{link_item.strip()}' target='_blank'>{link_item.strip()}</a></p>")
+                        # if notes:
+                        #    html_content.append(f"<p><strong>Notes:</strong> {notes}</p>")
+
+                html_content.append("</div></div>")
+
+            html_content.append("</div></div>")
+
+        html_content.append("</div></div>")
 
         # Sort the nessus_data based on the character count of Plugin Output
         nessus_data_sorted = sorted(nessus_data.items(), key=lambda item: len(item[0]))
 
         # List of keywords or phrases to filter out
-        filter_out_keywords = ["SSL certificate", "Server Status", "banner", "https://", "ping"]
+        filter_out_keywords = ["SSL certificate", "seems to be", "SSLv", "Service URL", "TCP wrapper", "TLSv", "Nessus detected", "Version", "Server Status", "banner", "http://", "https://", "ping"]
 
         # Include Service Info
         html_content += "<div class='collapsible-container'>"
@@ -327,44 +372,82 @@ class Interpreter:
                     notes = mindmap_port_data.get('Notes')
                     if link:
                         html_content += f"<p>{link}</p>"
-                    if notes:
-                        html_content += f"<p><strong>Notes:</strong> {notes}</p>"
+                    #if notes:
+                    #    html_content += f"<p><strong>Notes:</strong> {notes}</p>"
 
             html_content += "</div></div>"
         html_content += "</div></div>"
 
-        # Include Vulnerability Info
+        # Include Known Exploitable Vulns
         html_content += "<div class='collapsible-container'>"
-        html_content += "<div class='collapsible' onclick='toggleContent(this)'><span class='vulnerability'><strong>Vulnerability Info</strong></span><span class='icons'><span class='expand-button'></span><span class='collapse-button'></span></span></div>"
+        html_content += "<div class='collapsible' onclick='toggleContent(this)'><span class='vulnerability'><strong>CISA KEV Info</strong></span><span class='icons'><span class='expand-button'></span><span class='collapse-button'></span></span></div>"
         html_content += "<div class='content'>"
 
-        # Color code the entries based on risk level
-        risk_order = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
-        risk_colors = {"Critical": "red", "High": "orange", "Medium": "yellow", "Low": "green"}
+        for cve, details in known_exploitable_vulns.items():
+            vuln_info = details[0][0]
+            hosts = [host for _, host in details]
 
-        # Sort the vulnerabilities first by criticality label, then by cvss score
-        vulnerability_info_sorted = sorted(vulnerability_info.items(), key=lambda x: (risk_order.get(x[1][0][5], 999), -float(x[1][0][2]) if x[1][0][2] and x[1][0][2].replace('.', '', 1).isdigit() else 999), reverse=False)
-
-        # Display the vulnerability info
-        for vulnerability_name, vulnerability_data in vulnerability_info_sorted:
-            description, cve, cvss, host, ports, risk = vulnerability_data[0]
-            unique_hosts_ports = defaultdict(list)
-
-            for _, _, _, host_entry, port_entry, _ in vulnerability_data:
-                unique_hosts_ports[host_entry].append(port_entry)
-
-            html_content += f"<div class='collapsible-container-service'><div class='collapsible-service' onclick='toggleContentService(this)'><span class='vulnerability'><strong style='color: {risk_colors.get(risk, 'white')}'>{vulnerability_name} - {risk}</strong></span><span class='icons'><span class='expand-button'></span><span class='collapse-button'></span></span></div>"
+            html_content += f"<div class='collapsible-container-service'><div class='collapsible-service' onclick='toggleContentService(this)'><span class='vulnerability'><strong>{vuln_info['vulnerabilityName']} ({cve})</strong></span><span class='icons'><span class='expand-button'></span><span class='collapse-button'></span></span></div>"
             html_content += "<div class='content-service'>"
-            html_content += f"<p><strong>Description</strong>: {description}</p>"
-            html_content += f"<p><strong>CVE</strong>: {cve}</p>"
-            html_content += f"<p><strong>CVSS</strong>: {cvss}</p>"
-            html_content += f"<p><strong>Associated Ports</strong>: {', '.join(set(map(str, unique_hosts_ports[host])))}</p>"
-            html_content += "<p><strong>Hosts</strong>: <textarea readonly='' rows='4' cols='50'>"
-            html_content += "\n".join(unique_hosts_ports.keys())
+            html_content += f"<p><strong>Vendor/Project:</strong> {vuln_info['vendorProject']}</p>"
+            html_content += f"<p><strong>Product:</strong> {vuln_info['product']}</p>"
+            html_content += f"<p><strong>Description:</strong> {vuln_info['shortDescription']}</p>"
+            html_content += f"<p><strong>Notes:</strong> {vuln_info['notes']}</p>"
+            html_content += "<p><strong>Associated IPs</strong>: <textarea readonly='' rows='4' cols='50'>"
+            html_content += "\n".join(hosts)
             html_content += "</textarea></p>"
             html_content += "</div></div>"
 
-        html_content += "</div></div>"  # Close Vulnerability Info section
+        html_content += "</div></div>"
+
+        # Group vulnerabilities by criticality
+        vulnerabilities_by_criticality = {
+            "Critical": [],
+            "High": [],
+            "Medium": [],
+            "Low": []
+        }
+
+        risk_order = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
+        risk_colors = {"Critical": "red", "High": "orange", "Medium": "yellow", "Low": "green"}
+
+        for vulnerability_name, vulnerability_data in vulnerability_info.items():
+            description, cve, cvss, host, ports, risk = vulnerability_data[0]
+            vulnerabilities_by_criticality[risk].append({
+                "name": vulnerability_name,
+                "description": description,
+                "cve": cve,
+                "cvss": cvss,
+                "host": host,
+                "ports": ports
+            })
+
+        # Include Vulnerability Info grouped by criticality
+        html_content.append("<div class='collapsible-container'>")
+        html_content.append("<div class='collapsible' onclick='toggleContent(this)'><span class='vulnerability'><strong>Nessus Vulnerability Info</strong></span><span class='icons'><span class='expand-button'></span><span class='collapse-button'></span></span></div>")
+        html_content.append("<div class='content'>")
+
+        for criticality in ["Critical", "High", "Medium", "Low"]:
+            vulnerabilities = vulnerabilities_by_criticality[criticality]
+            if vulnerabilities:
+                html_content.append(f"<div class='collapsible-container-service'><div class='collapsible-service' onclick='toggleContentService(this)'><span class='vulnerability'><strong>{criticality}: ({len(vulnerabilities)})</strong></span><span class='icons'><span class='expand-button'></span><span class='collapse-button'></span></span></div>")
+                html_content.append("<div class='content-service'>")
+
+                for vuln in vulnerabilities:
+                    html_content.append(f"<div class='collapsible-container-service'><div class='collapsible-service' onclick='toggleContentService(this)'><span class='vulnerability'><strong style='color: {risk_colors[criticality]}'>{vuln['name']}</strong></span><span class='icons'><span class='expand-button'></span><span class='collapse-button'></span></span></div>")
+                    html_content.append("<div class='content-service'>")
+                    html_content.append(f"<p><strong>Description:</strong> {vuln['description']}</p>")
+                    html_content.append(f"<p><strong>CVE:</strong> {vuln['cve']}</p>")
+                    html_content.append(f"<p><strong>CVSS:</strong> {vuln['cvss']}</p>")
+                    html_content.append(f"<p><strong>Associated Ports:</strong> {vuln['ports']}</p>")
+                    html_content.append("<p><strong>Hosts:</strong> <textarea readonly='' rows='4' cols='50'>")
+                    html_content.append(f"{vuln['host']}")
+                    html_content.append("</textarea></p>")
+                    html_content.append("</div></div>")
+
+                html_content.append("</div></div>")
+
+        html_content.append("</div></div>")  # Close Vulnerability Info section
 
         
         # Include HTTP(S) Info
@@ -384,7 +467,7 @@ class Interpreter:
 
         # Include HTTP(S) Info
         html_content += "<div class='collapsible-container'>"
-        html_content += "<div class='collapsible' onclick='toggleContent(this)'><span class='service'><strong>Directories and HTTP Methods Per Host</strong></span><span class='icons'><span class='expand-button'></span><span class='collapse-button'></span></span></div>"
+        html_content += "<div class='collapsible' onclick='toggleContent(this)'><span class='service'><strong>Directories Per Host</strong></span><span class='icons'><span class='expand-button'></span><span class='collapse-button'></span></span></div>"
         html_content += "<div class='content'>"
         
         for host, urls in http_info.items():
@@ -403,12 +486,12 @@ class Interpreter:
         bash_script_content = self.generate_bash_script(http_info)
         html_content += "<div class='collapsible-container-service'><div class='collapsible-service' onclick='toggleContentService(this)'><span class='service'><strong>Bash Script for EyeWitness.py</strong></span><span class='icons'><span class='expand-button'></span><span class='collapse-button'></span></span></div>"
         html_content += "<div class='content-service'>"
-        html_content += "<p>Checks each URL to see if it returns 200 code, and if it does, it uses eyewitness to capture screenshot of the page. Currently, just experimental and I haven't tested this yet."
+        html_content += "<p>Checks each URL to see if it returns 200 code, and if it does, it uses eyewitness to capture screenshot of the page."
         html_content += f"<textarea readonly='' rows='20' cols='100'>{bash_script_content}</textarea>"
         html_content += "</div></div>"
         
         # JavaScript for toggling content
-        html_content += """
+        html_content.append("""
         <script>
             function toggleContent(element) {
                 var content = element.nextElementSibling;
@@ -442,8 +525,10 @@ class Interpreter:
                 }
             }
         </script>
-        </div></div></div></body></html>
-        """
+        </div></body></html>
+        """)
 
+        # Join and write the final HTML content
+        final_html_content = ''.join(html_content)
         with open(self.output_path, 'w', encoding='utf-8') as file:
-            file.write(html_content)
+            file.write(final_html_content)
