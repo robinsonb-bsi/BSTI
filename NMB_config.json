@@ -11,6 +11,17 @@
                 "allowed"
             ]
         },
+        "ICMP Timestamp Request Remote Date Disclosure": {
+            "ids": [
+                "10114"
+            ],
+            "scan_type": "sudo nping -icmp -icmp-type 13 -c 1 ",
+            "parameters": "{host}",
+            "verify_words": [
+                "Timestamp reply",
+                "type=14"
+            ]
+        },
         "SNMP_Public_Checks": {
             "ids": [
                 "10264",
