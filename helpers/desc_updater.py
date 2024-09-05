@@ -86,6 +86,7 @@ class DescriptionProcessor:
         - "external": Prefixes with "(External)"
         - "web": Prefixes with "(WebApp)"
         - "surveillance": Prefixes with "(Surveillance)"
+        - "mobile": Prefixes with "(Mobile)"
         - Other/internal: No prefix
 
         :return: Title prefix as a string.
@@ -94,6 +95,7 @@ class DescriptionProcessor:
             "external": "(External) ",
             "web": "(Web) ",
             "surveillance": "(Surveillance) ",
+            "mobile": "(Mobile) ",
             "internal": ""
         }
         return prefix_map.get(self.mode, "")

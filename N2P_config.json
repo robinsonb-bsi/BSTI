@@ -1,5 +1,26 @@
 {
     "plugins": {
+        "Exported Broadcast Receivers":{
+            "ids": [
+                "10000000"
+            ],
+            "writeup_db_id": "99694149",
+            "writeup_name": "Exported Broadcast Receivers"
+        },
+        "Backup Allowed":{
+            "ids": [
+                "10000002"
+            ],
+            "writeup_db_id": "4169",
+            "writeup_name": "Missing Android Backup Flag"
+        },
+        "Exported Activies":{
+            "ids": [
+                "10000001"
+            ],
+            "writeup_db_id": "159333",
+            "writeup_name": "Exported Activities"
+        },
         "Invalid X.509 (SSL/TLS) Certificate": {
             "ids": [
                 "35291",

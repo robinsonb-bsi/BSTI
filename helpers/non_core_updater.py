@@ -51,7 +51,30 @@ class NonCoreUpdater:
         for field in new_fields:
             current_field_dict[field["key"]] = field
 
-        return [field for field in current_field_dict.values() if field]
+        final_fields = [field for field in current_field_dict.values() if field and "id" not in field]
+
+        return final_fields
+    
+    # def prepare_fields(self, current_fields: Union[Dict[str, Any], List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    #     if isinstance(current_fields, dict):
+    #         current_field_dict = current_fields
+    #     elif isinstance(current_fields, list):
+    #         current_field_dict = {field["key"]: field for field in current_fields}
+    #     else:
+    #         log.error(f"Unexpected format for current_fields: {current_fields}")
+    #         return []
+
+    #     if "merged_assets" in current_field_dict:
+    #         merged_assets_value = current_field_dict["merged_assets"]
+    #         merged_assets_value["key"] = "merged_assets"
+    #         if "sort_order" in merged_assets_value:
+    #             del merged_assets_value["sort_order"]
+
+    #     new_fields = self.get_new_fields()
+    #     for field in new_fields:
+    #         current_field_dict[field["key"]] = field
+
+    #     return [field for field in current_field_dict.values() if field]
 
     def send_graphql_request(self, flaw_id: str, final_fields: List[Dict[str, Any]]) -> bool:
         url = self.url_manager.get_graphql_url()

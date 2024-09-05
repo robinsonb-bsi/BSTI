@@ -17,8 +17,8 @@ class ArgumentParser:
         parser.add_argument("-r","--reportID", dest="report_id", help="Report ID in plextrac", action="store")
         parser.add_argument(
             "-s", "--scope", 
-            help="Scope/Tag to add to the imported finding. Choose 'internal' for internal findings, 'external' for external findings, 'webapp' for web application-related findings, or 'surveillance' for surveillance-related findings.",
-            choices=["internal", "external", "web", "surveillance"],
+            help="Scope/Tag to add to the imported finding. Choose 'internal' for internal findings, 'external' for external findings, 'mobile' for mobile findings, 'webapp' for web application-related findings, or 'surveillance' for surveillance-related findings.",
+            choices=["internal", "external", "mobile, ""web", "surveillance"],
             type=str,
             action="store"
         )
