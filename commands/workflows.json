@@ -16,19 +16,19 @@
                 }
             ]
         },
-        "default_workflow": {
+        "Install and Launch Drozer (Linux)": {
             "commands": [
                 {
-                    "title": "123",
-                    "command": "echo 123"
+                    "title": "Install Drozer on Device",
+                    "command": "adb install tools/drozer-agent.apk"
                 },
                 {
-                    "title": "Who Am I",
-                    "command": "whoami"
+                    "title": "Setup Port Forward",
+                    "command": "adb forward tcp:31415 tcp:31415"
                 },
                 {
-                    "title": "List Files",
-                    "command": "ls"
+                    "title": "Launch Drozer Console in Kitty",
+                    "command": "kitty --hold -e bash -c 'echo \"Start the Drozer server on the device, then press Enter to continue...\"; read; drozer console connect'"
                 }
             ]
         }

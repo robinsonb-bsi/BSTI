@@ -6,7 +6,7 @@ import csv
 import sys
 import os
 import pandas as pd
-from PyQt5.QtWidgets import (QApplication, QTreeView, QToolBar, QVBoxLayout, QSlider, QFileSystemModel, QProgressBar, QHeaderView, QGraphicsPixmapItem, QGroupBox, QCompleter, QListWidget, QSizePolicy, QSplitter, QMenu, QInputDialog, QDialogButtonBox, QTableWidget, QTableWidgetItem, QCheckBox, QLabel, QAction, QTabBar, QStyle, QPlainTextEdit, QMainWindow, QGridLayout, QHBoxLayout, QTabWidget, QTextEdit, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QDialog, QLineEdit, QFormLayout, QMessageBox, QComboBox)
+from PyQt5.QtWidgets import (QApplication, QTreeView, QToolBar, QVBoxLayout, QSlider, QFileSystemModel, QProgressBar, QStatusBar, QHeaderView, QGraphicsPixmapItem, QGroupBox, QCompleter, QListWidget, QSizePolicy, QSplitter, QMenu, QInputDialog, QDialogButtonBox, QTableWidget, QTableWidgetItem, QCheckBox, QLabel, QAction, QTabBar, QStyle, QPlainTextEdit, QMainWindow, QGridLayout, QHBoxLayout, QTabWidget, QTextEdit, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QDialog, QLineEdit, QFormLayout, QMessageBox, QComboBox)
 from PyQt5.QtCore import QThread, pyqtSignal, QTimer, QUrl, QRegExp, Qt, QProcess, QEvent, QPoint, QRectF, QSizeF
 from PyQt5.QtGui import QTextCursor, QFont, QSyntaxHighlighter, QTextCharFormat, QColor, QDesktopServices, QPainter, QStandardItemModel
 from PyQt5.QtGui import QTextCharFormat, QColor, QStandardItem, QPixmap, QTextDocument
@@ -1062,13 +1062,14 @@ class CustomTableWidget(QTableWidget):
 class ZeusWorker(QThread):
     output_signal = pyqtSignal(str)
 
-    def __init__(self, command_args):
+    def __init__(self, command_args, working_directory):
         super().__init__()
         self.command_args = command_args
+        self.working_directory = working_directory
 
     def run(self):
         try:
-            process = subprocess.Popen(self.command_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+            process = subprocess.Popen(self.command_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, cwd=self.working_directory)
             final_output = ''
             for line in process.stdout:
                 final_output += line
@@ -1439,12 +1440,14 @@ class BinaryDownloadWidget(QWidget):
         self.addon1_button = QPushButton("Download Zeus")
         self.addon2_button = QPushButton("Download apk-mitmv2")
         self.download_apktool_button = QPushButton("Download apktool")
-        self.download_jadx_button = QPushButton("Download Jadx")  # New button
+        self.download_jadx_button = QPushButton("Download Jadx")
+        self.download_drozer_button = QPushButton("Download Drozer-agent APK")
 
         self.form_layout.addRow(self.addon1_button)
         self.form_layout.addRow(self.addon2_button)
         self.form_layout.addRow(self.download_apktool_button)
-        self.form_layout.addRow(self.download_jadx_button)  # Add new button to form
+        self.form_layout.addRow(self.download_jadx_button)
+        self.form_layout.addRow(self.download_drozer_button)
 
         # Create a progress bar and label to show download progress
         self.progress_bar = QProgressBar()
@@ -1473,6 +1476,7 @@ class BinaryDownloadWidget(QWidget):
         self.addon2_button.clicked.connect(self.download_addon2)
         self.download_apktool_button.clicked.connect(self.download_apktool)
         self.download_jadx_button.clicked.connect(self.download_jadx)
+        self.download_drozer_button.clicked.connect(self.download_drozer)
 
     def get_platform_url(self, base_url):
         platform = self.platform_combo.currentText()
@@ -1504,6 +1508,10 @@ class BinaryDownloadWidget(QWidget):
         url = 'https://github.com/skylot/jadx/releases/download/v1.5.0/jadx-1.5.0.zip'
         self.start_download(url, 'jadx-1.5.0.zip')
 
+    def download_drozer(self):
+        url = 'https://github.com/WithSecureLabs/drozer-agent/releases/download/3.1.0/drozer-agent.apk'
+        self.start_download(url, 'drozer-agent.apk')
+
     def start_download(self, url, download_path):
         if not url:
             return
@@ -1518,6 +1526,7 @@ class BinaryDownloadWidget(QWidget):
 
     def download_finished(self, message):
         self.status_label.setText(message)
+
         
         
 
@@ -2112,6 +2121,309 @@ class FileEditorDialog(QDialog):
         with open(self.file_path, 'w') as file:
             file.write(self.text_edit.toPlainText())
         self.accept()
+
+
+
+class DrozerThread(QThread):
+    output_signal = pyqtSignal(str)
+
+    def __init__(self, command):
+        super().__init__()
+        self.command = command
+
+    def run(self):
+        """Execute the Drozer command in a separate thread."""
+        try:
+            process = subprocess.Popen(self.command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout, stderr = process.communicate()
+
+            # Combine stdout and stderr and decode to strings
+            output = stdout.decode() + stderr.decode()
+
+            # Convert ANSI escape codes to HTML
+            formatted_output = self.ansi_to_html(output)
+
+            # Emit the formatted output
+            self.output_signal.emit(formatted_output)
+        except Exception as e:
+            self.output_signal.emit(f"Error: {str(e)}")
+
+    def ansi_to_html(self, text):
+        """Converts ANSI color codes to HTML span tags for QTextEdit display."""
+        ansi_to_html_map = {
+            '\033[91m': '<span style="color:#ff5555;">',  # Red
+            '\033[92m': '<span style="color:#50fa7b;">',  # Green
+            '\033[93m': '<span style="color:#f1fa8c;">',  # Yellow
+            '\033[94m': '<span style="color:#6272a4;">',  # Blue
+            '\033[95m': '<span style="color:#bd93f9;">',  # Magenta
+            '\033[0m': '</span>'  # Reset
+        }
+
+        for ansi, html in ansi_to_html_map.items():
+            text = text.replace(ansi, html)
+
+        # Replace newline with <br> for HTML display
+        text = text.replace('\n', '<br>')
+        return f"<pre>{text}</pre>"  # Use <pre> to preserve spacing
+
+
+
+
+
+class ConnectionHeartbeat(QThread):
+    status_signal = pyqtSignal(bool)
+
+    def __init__(self, check_function):
+        super().__init__()
+        self.check_function = check_function
+        self.running = True
+
+    def run(self):
+        """Periodically check the connection status."""
+        while self.running:
+            connected = self.check_function()
+            self.status_signal.emit(connected)
+            QThread.sleep(5)  # Check every 5 seconds
+
+    def stop(self):
+        """Stop the heartbeat check."""
+        self.running = False
+
+
+class DrozerTab:
+    def __init__(self, parent):
+        self.parent = parent
+        self.package = ""
+        self.drozer_commands = []
+        self.command_help = {}
+        self.screenshot_path = "output_screenshot.png"
+        self.heartbeat = ConnectionHeartbeat(self.check_drozer_connection)
+        self.heartbeat.status_signal.connect(self.update_status_bar)
+        self.heartbeat.start()
+        self.load_drozer_commands()
+        self.setup_drozer_tab()
+        self.apply_dracula_theme()
+
+    def load_drozer_commands(self):
+        """Load Drozer commands and their help text from a JSON file."""
+        json_path = os.path.join("json", "drozer_commands.json")
+        try:
+            with open(json_path, "r") as file:
+                data = json.load(file)
+                self.drozer_commands = ["Select a command..."] + [cmd["command"] for cmd in data.get("commands", [])]
+                self.command_help = {cmd["command"]: cmd["help"] for cmd in data.get("commands", [])}
+        except FileNotFoundError:
+            self.drozer_commands = ["Select a command..."]
+            self.command_help = {}
+            print("Warning: 'drozer_commands.json' file not found. Using default commands.")
+        except json.JSONDecodeError:
+            self.drozer_commands = ["Select a command..."]
+            self.command_help = {}
+            print("Error: Failed to decode 'drozer_commands.json'. Using default commands.")
+
+    def execute_drozer_command(self):
+        """Execute the selected Drozer command with placeholder prompts."""
+        selected_command = self.command_combobox.currentText()
+        if selected_command == "Select a command...":
+            self.output_area.append("Please select a valid command.")
+            return
+
+        # Find placeholders in the command (e.g., {package}, {uri}, etc.)
+        placeholders = re.findall(r'\{(.*?)\}', selected_command)
+        replacements = {}
+
+        # Replace {package} if it's set
+        if "package" in placeholders and not self.package:
+            self.output_area.append("Please set the package before executing a command.")
+            return
+        replacements['package'] = self.package
+
+        # Prompt the user to fill in values for other placeholders (e.g., {uri}, {ip}, {port})
+        for placeholder in placeholders:
+            if placeholder != 'package':  # Skip package as it's handled
+                value, ok = QInputDialog.getText(self.drozer_tab, f"Enter {placeholder}",
+                                                 f"Please provide a value for {placeholder}:")
+                if ok and value:
+                    replacements[placeholder] = value
+                else:
+                    self.output_area.append(f"Execution canceled: No value provided for {placeholder}.")
+                    return
+
+        # Replace placeholders with actual values in the command
+        command = selected_command.format(**replacements)
+        full_command = f"drozer console connect -c 'run {command}'"
+
+        # Clear the output area before running the next command
+        self.output_area.clear()
+        self.output_area.append(f"Executing: {full_command}")
+
+        # Run the command in a separate thread
+        self.drozer_thread = DrozerThread(full_command)
+        self.drozer_thread.output_signal.connect(self.handle_command_output)
+        self.drozer_thread.start()
+
+    def setup_drozer_tab(self):
+        """Create the layout for the Drozer connection tab."""
+        self.drozer_tab = QWidget()
+        self.drozer_layout = QVBoxLayout(self.drozer_tab)
+
+        # Status Bar
+        self.status_bar = QStatusBar()
+        self.status_label = QLabel("Checking connection...")
+        self.status_bar.addWidget(self.status_label)
+        self.drozer_layout.addWidget(self.status_bar)
+
+        # Create group for package selection
+        package_group = QGroupBox("Package Selection")
+        package_layout = QFormLayout()
+
+        self.package_input = QLineEdit()
+        self.package_input.setPlaceholderText("Enter target package (e.g., com.example.app)")
+        package_layout.addRow("Target Package:", self.package_input)
+
+        self.set_package_button = QPushButton("Set Package")
+        self.set_package_button.clicked.connect(self.set_package)
+        package_layout.addRow(self.set_package_button)
+
+        package_group.setLayout(package_layout)
+        self.drozer_layout.addWidget(package_group)
+
+        # Create group for command selection
+        command_group = QGroupBox("Drozer Command")
+        command_layout = QVBoxLayout()
+
+        self.command_combobox = QComboBox()
+        self.command_combobox.addItems(self.drozer_commands)
+        self.command_combobox.currentIndexChanged.connect(self.update_command_help)
+        command_layout.addWidget(self.command_combobox)
+
+        self.command_help_text = QTextEdit()
+        self.command_help_text.setReadOnly(True)
+        command_layout.addWidget(self.command_help_text)
+
+        self.execute_button = QPushButton("Execute Command")
+        self.execute_button.clicked.connect(self.execute_drozer_command)
+        command_layout.addWidget(self.execute_button)
+
+        command_group.setLayout(command_layout)
+        self.drozer_layout.addWidget(command_group)
+
+        # Output area
+        self.output_area = QTextEdit()
+        self.output_area.setReadOnly(True)
+        self.drozer_layout.addWidget(self.output_area)
+
+        # Screenshot button
+        self.screenshot_button = QPushButton("Take Screenshot of Output")
+        self.screenshot_button.clicked.connect(self.select_screenshot_path)
+        self.drozer_layout.addWidget(self.screenshot_button)
+
+        self.parent.subtab_widget.addTab(self.drozer_tab, "Drozer")
+
+    def apply_dracula_theme(self):
+        """Apply the Dracula theme to the widgets."""
+        theme_colors = {
+            "background": "#282a36",
+            "text": "#f8f8f2",
+            "button_bg": "#44475a",
+            "button_text": "#f8f8f2",
+            "highlight": "#bd93f9"
+        }
+        
+        self.drozer_tab.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme_colors['background']};
+                color: {theme_colors['text']};
+            }}
+            QPushButton {{
+                background-color: {theme_colors['button_bg']};
+                color: {theme_colors['button_text']};
+                border: 1px solid {theme_colors['highlight']};
+            }}
+            QPushButton:hover {{
+                background-color: {theme_colors['highlight']};
+            }}
+            QLineEdit {{
+                background-color: {theme_colors['button_bg']};
+                color: {theme_colors['text']};
+                border: 1px solid {theme_colors['highlight']};
+            }}
+            QTextEdit {{
+                background-color: {theme_colors['button_bg']};
+                color: {theme_colors['text']};
+                border: 1px solid {theme_colors['highlight']};
+            }}
+            QComboBox {{
+                background-color: {theme_colors['button_bg']};
+                color: {theme_colors['text']};
+                border: 1px solid {theme_colors['highlight']};
+            }}
+        """)
+
+    def check_drozer_connection(self):
+        """Check if Drozer is connected."""
+        try:
+            # Placeholder command to check connection status
+            result = subprocess.run("drozer console connect -c 'run some_command'", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            return result.returncode == 0
+        except Exception as e:
+            print(f"Error checking Drozer connection: {e}")
+            return False
+
+    def update_status_bar(self, connected):
+        """Update the status bar with the connection status."""
+        if connected:
+            self.status_label.setText("Drozer is connected.")
+            self.status_label.setStyleSheet("color: #50fa7b;")  # Green
+        else:
+            self.status_label.setText("Drozer is not connected.")
+            self.status_label.setStyleSheet("color: #ff5555;")  # Red
+
+    def update_command_help(self):
+        """Update the command help text based on the selected command."""
+        selected_command = self.command_combobox.currentText()
+        help_text = self.command_help.get(selected_command, "No help available for this command.")
+        self.command_help_text.setPlainText(help_text)
+
+    def set_package(self):
+        """Set the selected package for Drozer commands."""
+        self.package = self.package_input.text().strip()
+        if self.package:
+            self.output_area.append(f"Package set to: {self.package}")
+        else:
+            self.output_area.append("Please enter a valid package name.")
+
+
+    def handle_command_output(self, output):
+        """Handle the output from the Drozer command."""
+        self.output_area.append(output)  # Append the HTML-formatted text
+        self.output_area.ensureCursorVisible()  # Ensure new output is scrolled into view
+
+
+    def select_screenshot_path(self):
+        """Allow user to select the file path for the screenshot."""
+        file_path, _ = QFileDialog.getSaveFileName(self.drozer_tab, "Save Screenshot As", self.screenshot_path,
+                                                   "PNG Images (*.png);;All Files (*)")
+        if file_path:
+            self.screenshot_path = file_path
+            self.take_screenshot()
+
+    def take_screenshot(self):
+        """Take a screenshot of the output area."""
+        if not os.path.exists(os.path.dirname(self.screenshot_path)):
+            os.makedirs(os.path.dirname(self.screenshot_path))
+        screenshot = self.output_area.grab()
+        screenshot.save(self.screenshot_path)
+        self.output_area.append(f"Screenshot saved as '{self.screenshot_path}'.")
+
+    def closeEvent(self, event):
+        """Ensure to stop the heartbeat thread when closing the tab."""
+        self.heartbeat.stop()
+        self.heartbeat.wait()
+        super().closeEvent(event)
+
+
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -2752,6 +3064,8 @@ class MainWindow(QMainWindow):
         self.subtab_widget.addTab(self.apkleaks_tab, "APK Secrets")
 
         # Add the main tab to the tab widget
+        self.drozer_tab_handler = DrozerTab(self)
+
         self.tab_widget.addTab(self.mobile_tab, "Mobile Pentesting")
         
     def setup_explorer_tab(self):
@@ -3130,6 +3444,7 @@ class MainWindow(QMainWindow):
         self.console_output.clear()
 
     
+
     def get_default_adb_device(self):
         try:
             result = subprocess.check_output(['adb', 'devices']).decode()
@@ -3137,25 +3452,33 @@ class MainWindow(QMainWindow):
                 if "\tdevice" in line:
                     parts = line.split()
                     if len(parts) > 0:
+                        # Check if it's an emulator (starts with "emulator-")
+                        if parts[0].startswith("emulator-"):
+                            return parts[0], None  # Emulators typically do not have a port in the output
+                        # Check for devices with ip:port format
                         ip_port = parts[0].split(":")
                         if len(ip_port) == 2:
                             return ip_port[0], ip_port[1]
-            return "127.0.0.1", "5555"
+            return None, None  # No valid devices found
         except Exception as e:
             print(f"Error getting default adb device: {e}")
-            return "127.0.0.1", "5555"
+            return None, None
+
 
     def confirm_and_heartbeat_connection(self):
         ip = self.emulator_ip_input.text()
         port = self.emulator_port_input.text()
-        self.console_output.append(f"Confirming connection to {ip}:{port}...")
+        device_name = f"{ip}:{port}" if ip and port else "emulator-5554"  # Default to a common emulator name if empty
+        self.console_output.append(f"Confirming connection to {device_name}...")
 
         try:
-            # Connect to the emulator
-            result = subprocess.check_output(['adb', 'connect', f'{ip}:{port}']).decode()
-            self.console_output.append(result)
+            # Only use adb connect if it's an IP:port combo
+            if ':' in device_name:
+                result = subprocess.check_output(['adb', 'connect', device_name]).decode()
+                self.console_output.append(result)
 
-            if "connected" in result:
+            result = subprocess.check_output(['adb', 'devices']).decode()
+            if any(f"{device_name}\tdevice" in line for line in result.splitlines()):
                 self.console_output.append("Connection successful. Starting heartbeat...")
                 self.update_emulator_status(True)
                 self.start_heartbeat()
@@ -3165,6 +3488,8 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.console_output.append(f"Error connecting to emulator: {e}")
             self.update_emulator_status(False)
+
+
 
     def start_heartbeat(self):
         self.heartbeat_timer = QTimer(self)
@@ -3642,8 +3967,11 @@ class MainWindow(QMainWindow):
         if proxy:
             command_args.extend(['--proxy', proxy])
 
+        # Set the working directory to where Zeus config files are located
+        zeus_working_dir = os.path.join(self.tools_dir, "zeus")
+        
         # Create and start the worker thread
-        self.zeus_worker = ZeusWorker(command_args)
+        self.zeus_worker = ZeusWorker(command_args, zeus_working_dir)
         self.zeus_worker.output_signal.connect(self.update_zeus_output)
         self.zeus_worker.start()
 
