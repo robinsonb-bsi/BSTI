@@ -890,7 +890,7 @@ class N2PArgsDialog(QDialog):
         self.report_id_edit.setText(default_report_id)
 
         self.scope_edit = QComboBox(self)
-        self.scope_edit.addItems(["", "internal", "external", "web", "mobile" "surveillance"])
+        self.scope_edit.addItems(["", "internal", "external", "web", "mobile", "surveillance"])
 
         # Directory field with Browse button
         self.directory_layout = QHBoxLayout()
@@ -4116,7 +4116,7 @@ class MainWindow(QMainWindow):
             self.report_id = report_id
             QMessageBox.information(self, "Information", 
                             f"Client ID ({self.client_id}) and Report ID ({self.report_id}) have been pre-filled based on your latest report generation.")
-            
+        
         args_dialog = N2PArgsDialog(parent=self, default_client_id=self.client_id, default_report_id=self.report_id)
         if args_dialog.exec_() == QDialog.Accepted:
             args = args_dialog.get_arguments()
@@ -4136,16 +4136,25 @@ class MainWindow(QMainWindow):
 
 
     def execute_n2p_in_tab(self, command, tab_name):
-        # Create a new tab
+        # Create a new tab with Dracula theme
         tab = QTextEdit()
         tab.setReadOnly(True)
         tab.is_custom_tab = True
-
+        tab.setStyleSheet("""
+            QTextEdit {
+                background-color: #282a36;
+                color: #f8f8f2;
+                font-family: Consolas, monospace;
+                font-size: 12pt;
+                border: 1px solid #44475a;
+            }
+            """)
+        
         # Execute the script
         process = QProcess(tab)
         process.setProcessChannelMode(QProcess.MergedChannels)
         process.readyReadStandardOutput.connect(lambda: self.read_process_output(process, tab))
-        
+
         # Separate the command into the program and arguments
         program = command[0]
         arguments = command[1:]
@@ -4157,12 +4166,13 @@ class MainWindow(QMainWindow):
         # Add close button to the tab
         self.add_close_button_to_tab(tab, index)
 
-        # switch focus
+        # Switch focus
         self.tab_widget.setCurrentIndex(index)
 
 
     def read_process_output(self, process, text_edit):
-        text_edit.append(process.readAllStandardOutput().data().decode())
+        output = process.readAllStandardOutput().data().decode()
+        text_edit.append(output)
 
     def add_close_button_to_tab(self, tab, index):
         close_button = QPushButton()

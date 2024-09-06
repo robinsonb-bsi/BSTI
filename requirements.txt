@@ -1,6 +1,6 @@
 pyaxmlparser>=0.3.24
 paramiko==3.4.1
-PyQt5==5.15.2
+PyQt5==5.15.11
 htmlwebshot==0.1.2
 scp==0.14.5
 pandas==2.2.2
@@ -13,4 +13,4 @@ pretty-errors==1.2.25
 bs4==0.0.1
 autopep8==2.0.4
 cryptography==43.0.1
-drozer
+drozer==3.1.0

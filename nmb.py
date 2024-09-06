@@ -9,9 +9,7 @@ import pretty_errors
 from scripts.nessus import Nessus
 from scripts.creator import GenConfig
 from scripts.lackey import Lackey
-from dotenv import load_dotenv
 from scripts.logging_config import log
-load_dotenv()
 
 # ================== Utility Functions ==================
 
