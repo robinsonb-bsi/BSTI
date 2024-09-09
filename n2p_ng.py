@@ -73,7 +73,8 @@ class MainEngine:
             "internal": "internal",
             "external": "external",
             "web": "web",
-            "surveillance": "surveillance"
+            "surveillance": "surveillance",
+            "mobile": "mobile"
         }
         BASE_URL = f'https://{self.args.target_plextrac}.kevlar.bulletproofsi.net/'
         self.url_manager = URLManager(self.args, BASE_URL)
