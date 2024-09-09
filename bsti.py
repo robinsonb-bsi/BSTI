@@ -6,7 +6,7 @@ import csv
 import sys
 import os
 import pandas as pd
-from PyQt5.QtWidgets import (QApplication, QTreeView, QToolBar, QVBoxLayout, QSlider, QFileSystemModel, QProgressBar, QStatusBar, QHeaderView, QGraphicsPixmapItem, QGroupBox, QCompleter, QListWidget, QSizePolicy, QSplitter, QMenu, QInputDialog, QDialogButtonBox, QTableWidget, QTableWidgetItem, QCheckBox, QLabel, QAction, QTabBar, QStyle, QPlainTextEdit, QMainWindow, QGridLayout, QHBoxLayout, QTabWidget, QTextEdit, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QDialog, QLineEdit, QFormLayout, QMessageBox, QComboBox)
+from PyQt5.QtWidgets import (QApplication, QTreeView, QScrollArea, QToolBar, QVBoxLayout, QSlider, QFileSystemModel, QProgressBar, QStatusBar, QHeaderView, QGraphicsPixmapItem, QGroupBox, QCompleter, QListWidget, QSizePolicy, QSplitter, QMenu, QInputDialog, QDialogButtonBox, QTableWidget, QTableWidgetItem, QCheckBox, QLabel, QAction, QTabBar, QStyle, QPlainTextEdit, QMainWindow, QGridLayout, QHBoxLayout, QTabWidget, QTextEdit, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QDialog, QLineEdit, QFormLayout, QMessageBox, QComboBox)
 from PyQt5.QtCore import QThread, pyqtSignal, QTimer, QUrl, QRegExp, Qt, QProcess, QEvent, QPoint, QRectF, QSizeF
 from PyQt5.QtGui import QTextCursor, QFont, QSyntaxHighlighter, QTextCharFormat, QColor, QDesktopServices, QPainter, QStandardItemModel
 from PyQt5.QtGui import QTextCharFormat, QColor, QStandardItem, QPixmap, QTextDocument
@@ -2423,6 +2423,45 @@ class DrozerTab:
         super().closeEvent(event)
 
 
+class NucleiWorker(QThread):
+    nuclei_output = pyqtSignal(str)
+    nuclei_finished = pyqtSignal(str)
+
+    def __init__(self, target_url, proxy=None, output_file="output.json"):
+        super().__init__()
+        self.target_url = target_url
+        self.proxy = proxy
+        self.output_file = output_file
+
+    def run(self):
+        try:
+            command = ["nuclei", "-u", self.target_url, "-json-export", self.output_file]
+
+            if self.proxy:
+                command.extend(["-proxy", self.proxy])
+
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+            while True:
+                output_line = process.stdout.readline()
+                if output_line == "" and process.poll() is not None:
+                    break
+                if output_line:
+                    self.nuclei_output.emit(output_line.strip())  # Emit each line
+
+            process.wait()
+
+            if process.returncode == 0:
+                with open(self.output_file, 'r') as f:
+                    output = f.read()
+                self.nuclei_finished.emit(output)
+            else:
+                error_output = process.stderr.read().strip()
+                self.nuclei_finished.emit(f"Error: {error_output}")
+
+        except Exception as e:
+            self.nuclei_finished.emit(f"Exception: {str(e)}")
+
 
 
 class MainWindow(QMainWindow):
@@ -2614,7 +2653,7 @@ class MainWindow(QMainWindow):
         self.setup_nmb_tab()
 
         # added zeus tab
-        self.setup_zeus_tab()
+        self.setup_webapp_tab()
         
         # Mobile testing tab
         self.setup_mobile_testing_tab()
@@ -2765,24 +2804,6 @@ class MainWindow(QMainWindow):
         self.results_table = QTableWidget()
         self.results_table.setColumnCount(3)
         self.results_table.setHorizontalHeaderLabels(["Finding", "Severity", "Common False Positive"])
-
-        # Apply Dracula theme styles
-        self.results_table.setStyleSheet("""
-            QTableWidget {
-                background-color: #282a36;
-                color: #f8f8f2;
-            }
-            QHeaderView::section {
-                background-color: #44475a;
-                color: #f8f8f2;
-            }
-            QTableWidget::item {
-                border: 1px solid #44475a;
-            }
-            QTableWidget::item:selected {
-                background-color: #6272a4;
-            }
-        """)
 
         # Ensure the results table expands to fill available space
         self.results_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -3580,9 +3601,6 @@ class MainWindow(QMainWindow):
         else:
             self.status_label.setStyleSheet("color: #ff5555;")  # Red color
             self.status_label.setText("MobSF: Disconnected")
-
-
-            
         
     def show_context_menu(self, pos):
         # Create and show context menu
@@ -3748,11 +3766,16 @@ class MainWindow(QMainWindow):
                     if row in self.excluded_items:
                         continue  # Skip excluded items
 
+                    
+
                     finding_item = self.results_table.item(row, 0)
                     severity_item = self.results_table.item(row, 1)
 
                     finding_name = finding_item.text() if finding_item else ""
                     severity = severity_item.text() if severity_item else ""
+
+                    if finding_name == 'Title': # exclude title row from final results if user doesnt do it already
+                        continue
 
                     # Normalize severity using the severity map
                     normalized_severity = self.severity_map.get(severity.capitalize(), severity)
@@ -3787,12 +3810,26 @@ class MainWindow(QMainWindow):
                     writer.writerow(csv_row)
                     processed_patterns.add(converted_name)
 
-
-
-
+    
+    
     def display_results(self, findings):
         unique_findings = []
         seen_titles = set()
+
+        # Define severity colors
+        severity_colors = {
+            "High": QColor(255, 0, 0),        # Red
+            "Medium": QColor(255, 165, 0),    # Orange
+            "Low": QColor(0, 255, 0),         # Green
+            "Informational": QColor(0, 0, 255), # Blue
+            "Unknown": QColor(128, 128, 128)  # Gray
+        }
+
+        # Define false positive colors
+        fp_colors = {
+            "Yes": QColor(255, 192, 192),       # Light red for common false positive
+            "No": QColor(192, 255, 192)         # Light green for not common false positive
+        }
 
         for finding in findings:
             title = finding.get("title", "")
@@ -3822,6 +3859,22 @@ class MainWindow(QMainWindow):
             is_common_fp = "Yes" if self.is_common_fp(finding.get("title", "")) else "No"
             common_fp_item = QTableWidgetItem(is_common_fp)
 
+            # Color-code severity
+            severity_key = finding.get("severity", "Unknown")
+            severity_color = severity_colors.get(severity_key, QColor(128, 128, 128))
+
+            # Set background and text color for severity
+            severity_item.setBackground(severity_color)
+
+            # Color-code common false positive
+            fp_color = fp_colors.get(is_common_fp, QColor(200, 200, 200))  # Default to light gray if not found
+            common_fp_item.setBackground(fp_color)
+            common_fp_item.setForeground(QColor(0, 0, 0))  # Black text for clarity
+
+            # Store finding data as metadata in the title_item
+            title_item.setData(Qt.UserRole, finding)
+
+            # Set the items in the table
             self.results_table.setItem(row, 0, title_item)
             self.results_table.setItem(row, 1, severity_item)
             self.results_table.setItem(row, 2, common_fp_item)
@@ -3830,8 +3883,111 @@ class MainWindow(QMainWindow):
         self.results_table.update()  # Refresh the table
 
         self.store_original_data_to_temp()
-        self.load_and_display_manifest() 
+        self.load_and_display_manifest()
 
+        # Connect cell click to show details
+        self.results_table.cellDoubleClicked.connect(self.on_finding_double_click)
+
+
+
+
+
+
+
+    def on_finding_double_click(self, row, column):
+        # Get the finding data stored in the table
+        finding = self.results_table.item(row, 0).data(Qt.UserRole)
+        if finding:
+            # Show detailed view of the finding
+            self.show_finding_details(finding)
+
+    def show_finding_details(self, finding):
+        # Extract details from the finding
+        title = finding.get('title', 'N/A')
+        severity = finding.get('severity', 'N/A')
+        description = finding.get('description', 'N/A')
+        is_fp = "Yes" if self.is_common_fp(title) else "No"
+
+        # Create a dialog to show detailed information
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Finding Details")
+        dialog.resize(1200, 900)
+        dialog.setStyleSheet("""
+            QDialog {
+                background-color: #282a36;
+                color: #f8f8f2;
+            }
+            QLabel {
+                color: #bd93f9;
+                font-size: 14px;
+            }
+            QTextEdit {
+                background-color: #44475a;
+                color: #f8f8f2;
+                font-family: Consolas, 'Courier New', monospace;
+                font-size: 12px;
+                border: 1px solid #6272a4;
+                padding: 10px;
+            }
+            QPushButton {
+                background-color: #6272a4;
+                color: #f8f8f2;
+                border-radius: 5px;
+                padding: 8px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #50fa7b;
+            }
+        """)
+
+        # Create scroll area
+        scroll_area = QScrollArea(dialog)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: none;
+            }
+            QWidget {
+                background-color: #282a36;
+            }
+        """)
+
+        scroll_content = QWidget()
+        scroll_layout = QGridLayout(scroll_content)
+
+        # Add details to the scroll layout
+        scroll_layout.addWidget(QLabel("Title:"), 0, 0)
+        scroll_layout.addWidget(QLabel(title), 0, 1)
+
+        scroll_layout.addWidget(QLabel("Severity:"), 1, 0)
+        scroll_layout.addWidget(QLabel(severity), 1, 1)
+
+        scroll_layout.addWidget(QLabel("Common False Positive:"), 2, 0)
+        scroll_layout.addWidget(QLabel(is_fp), 2, 1)
+
+        scroll_layout.addWidget(QLabel("Description:"), 3, 0)
+        description_text = QTextEdit()
+        description_text.setPlainText(description)
+        description_text.setReadOnly(True)
+        scroll_layout.addWidget(description_text, 3, 1)
+
+        # Set the scroll content and attach it to the scroll area
+        scroll_area.setWidget(scroll_content)
+
+        # Create a main layout
+        main_layout = QVBoxLayout(dialog)
+        main_layout.addWidget(scroll_area)
+
+        # Close button
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(dialog.close)
+        main_layout.addWidget(close_button, alignment=Qt.AlignRight)
+
+        # Set main layout to dialog
+        dialog.setLayout(main_layout)
+
+        dialog.exec_()
 
 
     def load_common_false_positives(self, file_path):
@@ -3884,9 +4040,432 @@ class MainWindow(QMainWindow):
         wizard.exec_()
 
 
-    def setup_zeus_tab(self):
-        self.zeus_tab = QWidget()
-        self.zeus_layout = QVBoxLayout(self.zeus_tab)
+    def setup_webapp_tab(self):
+        # Create WebApp tab
+        self.webapp_tab = QWidget()
+        self.webapp_tab.is_custom_tab = True 
+        self.webapp_layout = QVBoxLayout(self.webapp_tab)
+
+        # Tab Widget for different tools (Zeus, Nuclei)
+        self.webapp_tools_tab_widget = QTabWidget()
+
+        # Setup Zeus Subtab
+        self.setup_zeus_subtab()
+
+        # Setup Nuclei Subtab
+        self.setup_nuclei_subtab()
+
+        # Add Zeus and Nuclei Subtabs to WebApp Tab Widget
+        self.webapp_tools_tab_widget.addTab(self.zeus_subtab, "Zeus")
+        self.webapp_tools_tab_widget.addTab(self.nuclei_subtab, "Nuclei")
+
+        # Add the tools tab widget to the main layout
+        self.webapp_layout.addWidget(self.webapp_tools_tab_widget)
+
+        # Add WebApp tab to the main tab widget
+        self.tab_widget.addTab(self.webapp_tab, "WebApp Testing")
+
+    
+    def setup_nuclei_subtab(self):
+        self.nuclei_subtab = QWidget()
+        self.nuclei_layout = QVBoxLayout(self.nuclei_subtab)
+
+        self.nuclei_subtab.setStyleSheet("""
+            QWidget {
+                background-color: #282a36;
+                color: #f8f8f2;
+            }
+            QLineEdit {
+                background-color: #44475a;
+                border: 2px solid #6272a4;
+                color: #f8f8f2;
+            }
+            QPushButton {
+                background-color: #6272a4;
+                color: #f8f8f2;
+                border-radius: 5px;
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background-color: #50fa7b;
+            }
+            QPushButton:disabled {
+                background-color: #44475a;
+                color: #f8f8f2;
+            }
+            QTableWidget {
+                background-color: #44475a;
+                border: none;
+                color: #f8f8f2;
+            }
+            QHeaderView::section {
+                background-color: #6272a4;
+                color: #f8f8f2;
+            }
+            QTableWidget::item {
+                border: none;
+                color: #f8f8f2;
+            }
+        """)
+
+        # Argument Layout for Nuclei
+        self.nuclei_argument_layout = QFormLayout()
+
+        # Target URL input
+        self.nuclei_target_url_input = QLineEdit()
+        self.nuclei_target_url_input.setPlaceholderText("Enter target URL (e.g., http://localhost:5000)")
+
+        # Proxy input
+        self.nuclei_proxy_input = QLineEdit()
+        self.nuclei_proxy_input.setPlaceholderText("Enter proxy (e.g., squid.kevlar.bulletproofsi.net:3128)")
+        self.nuclei_proxy_input.setText("squid.kevlar.bulletproofsi.net:3128")
+
+        # Add rows to the form
+        self.nuclei_argument_layout.addRow("Target URL:", self.nuclei_target_url_input)
+        self.nuclei_argument_layout.addRow("Proxy:", self.nuclei_proxy_input)
+
+        # Add form layout to the main layout
+        self.nuclei_layout.addLayout(self.nuclei_argument_layout)
+
+        # Run Nuclei button
+        self.nuclei_run_button = QPushButton("Run Nuclei")
+        self.nuclei_run_button.setCursor(Qt.PointingHandCursor)
+        self.nuclei_run_button.clicked.connect(self.execute_nuclei)
+        self.nuclei_layout.addWidget(self.nuclei_run_button)
+
+        # Generate HTML Report button
+        self.nuclei_report_button = QPushButton("Generate HTML Report")
+        self.nuclei_report_button.setCursor(Qt.PointingHandCursor)
+        self.nuclei_report_button.clicked.connect(self.generate_html_report)
+        self.nuclei_layout.addWidget(self.nuclei_report_button)
+
+        # Output Table for Nuclei Results
+        self.nuclei_table = QTableWidget()
+        self.nuclei_table.setColumnCount(4)
+        self.nuclei_table.setHorizontalHeaderLabels(["Template ID", "Host", "Type", "Severity"])
+        self.nuclei_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.nuclei_table.cellDoubleClicked.connect(self.show_detailed_view)
+        self.nuclei_layout.addWidget(self.nuclei_table)
+
+
+
+    def execute_nuclei(self):
+        target_url = self.nuclei_target_url_input.text().strip()
+        proxy = self.nuclei_proxy_input.text().strip()
+
+        if not target_url:
+            QMessageBox.warning(self, "Missing URL", "Please enter a target URL before running the scan.")
+            return
+
+        # Update button status to show scan is running
+        self.nuclei_run_button.setText("Running...")
+        self.nuclei_run_button.setEnabled(False)
+
+        # Clear the table before starting a new scan
+        self.nuclei_table.setRowCount(0)
+        self.nuclei_worker = NucleiWorker(target_url, proxy=proxy)
+        self.nuclei_worker.nuclei_finished.connect(self.handle_nuclei_results)
+        self.nuclei_worker.start()
+
+    
+    def generate_html_report(self):
+        if not hasattr(self, 'nuclei_results') or not self.nuclei_results:
+            QMessageBox.warning(self, "No Results", "No results to generate a report.")
+            return
+
+        html_content = '''
+        <html>
+        <head>
+            <title>Nuclei Scan Report</title>
+            <style>
+                body {
+                    background-color: #333;
+                    color: #fff;
+                    font-family: Arial, sans-serif;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    min-height: 100vh;
+                    margin: 0;
+                }
+                .container {
+                    width: 80%;
+                    max-width: 1200px;
+                    padding: 20px;
+                    background-color: #222;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                }
+                h1, h2 {
+                    color: #fff;
+                    margin-bottom: 20px;
+                }
+                .result-card {
+                    width: 100%;
+                    margin-bottom: 20px;
+                    padding: 15px;
+                    background-color: #333;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+                    border: 1px solid #444;
+                }
+                .result-card h3 {
+                    margin: 0;
+                    color: #fff;
+                    border-bottom: 1px solid #444;
+                    padding-bottom: 10px;
+                }
+                .result-card .details {
+                    margin-top: 10px;
+                }
+                .result-card .details div {
+                    margin-bottom: 15px;
+                }
+                .result-card .details .label {
+                    font-weight: bold;
+                    color: #ddd;
+                }
+                .result-card .details .value {
+                    color: #ccc;
+                    word-wrap: break-word;
+                }
+                .result-card pre {
+                    background-color: #111;
+                    padding: 10px;
+                    border-radius: 5px;
+                    font-size: 13px;
+                    color: #ccc;
+                    overflow-x: auto; 
+                    white-space: pre-wrap;
+                }
+                .severity-high {
+                    background-color: #FF5A5A;
+                    color: #fff;
+                    padding: 5px;
+                    border-radius: 4px;
+                }
+                .severity-medium {
+                    background-color: #FFAA00;
+                    color: #000;
+                    padding: 5px;
+                    border-radius: 4px;
+                }
+                .severity-low {
+                    background-color: #FFCC00;
+                    color: #000;
+                    padding: 5px;
+                    border-radius: 4px;
+                }
+                .severity-info {
+                    background-color: #7EB6FF;
+                    color: #000;
+                    padding: 5px;
+                    border-radius: 4px;
+                }
+                .url {
+                    color: #1E90FF;
+                    text-decoration: none;
+                }
+                .url:hover {
+                    text-decoration: underline;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>Nuclei Scan Report</h1>
+                <h2>Scan Results</h2>
+        '''
+
+        for result in self.nuclei_results:
+            info = result.get('info', {})
+            severity = info.get('severity', 'N/A')
+            description = info.get('description', 'N/A')
+            matched_at = result.get('matched-at', 'N/A')
+            request = result.get('request', 'N/A')
+            response = result.get('response', 'N/A')
+
+            severity_class = f'severity-{severity.lower()}' if severity.lower() in ['high', 'medium', 'low', 'info'] else 'severity-info'
+            
+            html_content += f"""
+                <div class="result-card">
+                    <h3>Template ID: {result.get('template-id', 'N/A')}</h3>
+                    <div class="details">
+                        <div><span class="label">Host:</span> <a href="{result.get('url', '#')}" class="url">{result.get('host', 'N/A')}</a></div>
+                        <div><span class="label">Type:</span> {result.get('type', 'N/A')}</div>
+                        <div><span class="label">Severity:</span> <span class="{severity_class}">{severity}</span></div>
+                        <div><span class="label">Description:</span> {description}</div>
+                        <div><span class="label">Matched At:</span> {matched_at}</div>
+                        <div><span class="label">Request:</span> <pre>{request}</pre></div>
+                        <div><span class="label">Response:</span> <pre>{response}</pre></div>
+                    </div>
+                </div>
+            """
+
+        html_content += '''
+            </div>
+        </body>
+        </html>
+        '''
+
+        # Save the HTML content to a file
+        file_dialog = QFileDialog(self, "Save Report", "", "HTML Files (*.html)")
+        if file_dialog.exec_():
+            file_path = file_dialog.selectedFiles()[0]
+            with open(file_path, 'w') as file:
+                file.write(html_content)
+            QMessageBox.information(self, "Report Saved", f"Report saved to {file_path}.")
+
+
+
+
+    def handle_nuclei_results(self, output):
+        try:
+            # Parse JSON output
+            results = json.loads(output)
+            self.nuclei_results = results  # Store results for report generation
+            self.populate_nuclei_table(results)
+            os.remove("output.json")
+
+        except json.JSONDecodeError:
+            self.nuclei_output.append("Error: Invalid JSON format.")
+
+        # Re-enable the button and update text when finished
+        self.nuclei_run_button.setText("Run Nuclei")
+        self.nuclei_run_button.setEnabled(True)
+
+
+    def populate_nuclei_table(self, results):
+        for result in results:
+            row_position = self.nuclei_table.rowCount()
+            self.nuclei_table.insertRow(row_position)
+
+            # Access 'info' section to get severity
+            info = result.get('info', {})
+            severity = info.get('severity', 'N/A')
+
+            self.nuclei_table.setItem(row_position, 0, QTableWidgetItem(result.get('template-id', 'N/A')))
+            self.nuclei_table.setItem(row_position, 1, QTableWidgetItem(result.get('host', 'N/A')))
+            self.nuclei_table.setItem(row_position, 2, QTableWidgetItem(result.get('type', 'N/A')))
+            self.nuclei_table.setItem(row_position, 3, QTableWidgetItem(severity))
+
+            # Store the entire result object as user data for detailed view
+            self.nuclei_table.item(row_position, 0).setData(Qt.UserRole, result)
+
+
+    def show_detailed_view(self, row, column):
+        result = self.nuclei_table.item(row, 0).data(Qt.UserRole)
+
+        # Get the severity information
+        info = result.get('info', {})
+        severity = info.get('severity', 'N/A')
+
+        # Create a dialog to show detailed information
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Detailed View")
+        dialog.resize(900, 600)  # Set a larger size for the dialog
+        dialog.setStyleSheet("""
+            QDialog {
+                background-color: #282a36;
+                color: #f8f8f2;
+            }
+            QLabel {
+                color: #bd93f9;
+                font-size: 14px;
+            }
+            QTextEdit {
+                background-color: #44475a;
+                color: #f8f8f2;
+                font-family: Consolas, 'Courier New', monospace;
+                font-size: 12px;
+                border: 1px solid #6272a4;
+                padding: 10px;
+            }
+            QPushButton {
+                background-color: #6272a4;
+                color: #f8f8f2;
+                border-radius: 5px;
+                padding: 8px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #50fa7b;
+            }
+        """)
+
+        # Create scroll area
+        scroll_area = QScrollArea(dialog)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: none;
+            }
+            QWidget {
+                background-color: #282a36;
+            }
+        """)
+        
+        scroll_content = QWidget()
+        scroll_layout = QGridLayout(scroll_content)
+
+        # Add severity to the scroll layout
+        scroll_layout.addWidget(QLabel("Severity:"), 0, 0)
+        scroll_layout.addWidget(QLabel(severity), 0, 1)
+
+        # Add other labels and values to the scroll layout
+        scroll_layout.addWidget(QLabel("Matcher Name:"), 1, 0)
+        scroll_layout.addWidget(QLabel(result.get('matcher-name', 'N/A')), 1, 1)
+
+        scroll_layout.addWidget(QLabel("Host:"), 2, 0)
+        scroll_layout.addWidget(QLabel(result.get('host', 'N/A')), 2, 1)
+
+        scroll_layout.addWidget(QLabel("URL:"), 3, 0)
+        scroll_layout.addWidget(QLabel(result.get('url', 'N/A')), 3, 1)
+
+        scroll_layout.addWidget(QLabel("Matched At:"), 4, 0)
+        scroll_layout.addWidget(QLabel(result.get('matched-at', 'N/A')), 4, 1)
+
+        # Add Request with proper formatting
+        scroll_layout.addWidget(QLabel("Request:"), 5, 0)
+        request_text = QTextEdit()
+        request_text.setPlainText(result.get('request', 'N/A'))  # Preserve original formatting
+        request_text.setReadOnly(True)
+        scroll_layout.addWidget(request_text, 5, 1)
+
+        # Add Response with proper formatting
+        scroll_layout.addWidget(QLabel("Response:"), 6, 0)
+        response_text = QTextEdit()
+        response_text.setPlainText(result.get('response', 'N/A'))  # Preserve original formatting
+        response_text.setReadOnly(True)
+        scroll_layout.addWidget(response_text, 6, 1)
+
+        # Set the scroll content and attach to the scroll area
+        scroll_area.setWidget(scroll_content)
+
+        # Create a main layout
+        main_layout = QVBoxLayout(dialog)
+        main_layout.addWidget(scroll_area)
+
+        # Close button
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(dialog.close)
+        main_layout.addWidget(close_button, alignment=Qt.AlignRight)
+
+        # Set main layout to dialog
+        dialog.setLayout(main_layout)
+
+        dialog.exec_()
+
+
+
+
+
+    def setup_zeus_subtab(self):
+        self.zeus_subtab = QWidget()
+        self.zeus_layout = QVBoxLayout(self.zeus_subtab)
 
         # Argument Layout
         self.zeus_argument_layout = QFormLayout()
@@ -3938,7 +4517,8 @@ class MainWindow(QMainWindow):
         self.zeus_layout.addWidget(self.zeus_output)
 
         # Add Zeus tab to the main tab widget
-        self.tab_widget.addTab(self.zeus_tab, "Zeus")
+        # self.tab_widget.addTab(self.zeus_tab, "Zeus")
+        self.zeus_layout.addWidget(self.zeus_output)
 
 
     def execute_zeus(self):
