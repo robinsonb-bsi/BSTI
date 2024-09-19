@@ -18,8 +18,10 @@ class Interpreter:
         self.output_file = 'Interpreter_output.html'
         self.output_path = os.path.join(self.client_dir, self.output_file)
         self.mindmap_data = self.read_mindmap_json()
+        self.cisa_kev_file = os.path.join(self.client_dir, "known_exploited_vulnerabilities.csv")
         self.cisa_kev_data = self.download_and_parse_cisa_kev()
         self.generate_html_output()
+        self.cleanup_files()
 
     @staticmethod
     def read_mindmap_json():
@@ -29,13 +31,12 @@ class Interpreter:
     def download_and_parse_cisa_kev(self):
         # Download the CISA KEV CSV file
         response = requests.get(self.CISA_KEV_URL)
-        cisa_kev_csv = os.path.join(self.client_dir, "known_exploited_vulnerabilities.csv")
-        with open(cisa_kev_csv, 'wb') as file:
+        with open(self.cisa_kev_file, 'wb') as file:
             file.write(response.content)
 
         # Parse the CISA KEV CSV file
         cisa_kev_data = {}
-        with open(cisa_kev_csv, 'r', encoding='utf-8') as file:
+        with open(self.cisa_kev_file, 'r', encoding='utf-8') as file:
             reader = csv.DictReader(file)
             for row in reader:
                 cve_id = row['cveID']
@@ -532,3 +533,8 @@ class Interpreter:
         final_html_content = ''.join(html_content)
         with open(self.output_path, 'w', encoding='utf-8') as file:
             file.write(final_html_content)
+    
+    def cleanup_files(self):
+        # Delete the CISA KEV CSV file after processing
+        if os.path.exists(self.cisa_kev_file):
+            os.remove(self.cisa_kev_file)

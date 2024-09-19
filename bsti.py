@@ -1442,12 +1442,14 @@ class BinaryDownloadWidget(QWidget):
         self.download_apktool_button = QPushButton("Download apktool")
         self.download_jadx_button = QPushButton("Download Jadx")
         self.download_drozer_button = QPushButton("Download Drozer-agent APK")
+        self.download_nuclei_button = QPushButton("Download nuclei")
 
         self.form_layout.addRow(self.addon1_button)
         self.form_layout.addRow(self.addon2_button)
         self.form_layout.addRow(self.download_apktool_button)
         self.form_layout.addRow(self.download_jadx_button)
         self.form_layout.addRow(self.download_drozer_button)
+        self.form_layout.addRow(self.download_nuclei_button)
 
         # Create a progress bar and label to show download progress
         self.progress_bar = QProgressBar()
@@ -1477,6 +1479,7 @@ class BinaryDownloadWidget(QWidget):
         self.download_apktool_button.clicked.connect(self.download_apktool)
         self.download_jadx_button.clicked.connect(self.download_jadx)
         self.download_drozer_button.clicked.connect(self.download_drozer)
+        self.download_nuclei_button.clicked.connect(self.download_nuclei)
 
     def get_platform_url(self, base_url):
         platform = self.platform_combo.currentText()
@@ -1512,6 +1515,19 @@ class BinaryDownloadWidget(QWidget):
         url = 'https://github.com/WithSecureLabs/drozer-agent/releases/download/3.1.0/drozer-agent.apk'
         self.start_download(url, 'drozer-agent.apk')
 
+    def download_nuclei(self):
+        base_url = 'https://github.com/projectdiscovery/nuclei/releases/download/v3.3.2/'
+        
+        if self.platform_combo.currentText() == "Windows":
+            zip_file = 'nuclei_3.3.2_windows_amd64.zip'
+        elif self.platform_combo.currentText() == "Linux":
+            zip_file = 'nuclei_3.3.2_linux_amd64.zip'
+        
+        full_url = base_url + zip_file
+        
+        self.start_download(full_url, zip_file)
+
+
     def start_download(self, url, download_path):
         if not url:
             return
@@ -1529,7 +1545,7 @@ class BinaryDownloadWidget(QWidget):
 
         
         
-
+### Currently not being used - idk if i'll get around to doing it 
 class ScreenshotEditorTab(QWidget):
     def __init__(self):
         super().__init__()
@@ -2433,24 +2449,47 @@ class NucleiWorker(QThread):
         self.proxy = proxy
         self.output_file = output_file
 
+    def get_nuclei_path(self):
+        """Return the correct nuclei path based on the operating system."""
+        system = platform.system()
+        
+        if system == "Windows":
+            nuclei_path = os.path.join("tools", "nuclei_3.3.2_windows_amd64", "nuclei.exe")
+        elif system == "Linux":
+            nuclei_path = os.path.join("tools", "nuclei_3.3.2_linux_amd64", "nuclei")
+        # elif system == "Darwin": # added removed for now
+        #     nuclei_path = os.path.join("tools", "nuclei_3.3.2_darwin_amd64", "nuclei")
+        else:
+            raise Exception("Unsupported operating system")
+        
+        return nuclei_path
+
     def run(self):
         try:
-            command = ["nuclei", "-u", self.target_url, "-json-export", self.output_file]
+            # Get the correct path to the nuclei binary based on the OS
+            nuclei_path = self.get_nuclei_path()
+
+            # Build the command with the correct nuclei binary
+            command = [nuclei_path, "-u", self.target_url, "-json-export", self.output_file]
 
             if self.proxy:
                 command.extend(["-proxy", self.proxy])
 
+            # Execute the command
             process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
+            # Read and emit output line by line
             while True:
                 output_line = process.stdout.readline()
                 if output_line == "" and process.poll() is not None:
                     break
                 if output_line:
-                    self.nuclei_output.emit(output_line.strip())  # Emit each line
+                    self.nuclei_output.emit(output_line.strip())
 
+            # Wait for the process to complete
             process.wait()
 
+            # Check the return code and emit the final output
             if process.returncode == 0:
                 with open(self.output_file, 'r') as f:
                     output = f.read()
@@ -2461,7 +2500,6 @@ class NucleiWorker(QThread):
 
         except Exception as e:
             self.nuclei_finished.emit(f"Exception: {str(e)}")
-
 
 
 class MainWindow(QMainWindow):
@@ -4543,7 +4581,7 @@ class MainWindow(QMainWindow):
 
         command_args = [zeus_executable, target_url, '--project-folder', project_folder]
         if login_config:
-            command_args.extend(['--login-config', login_config])
+            command_args.extend(['--policy', login_config])
         if proxy:
             command_args.extend(['--proxy', proxy])
 
@@ -5599,17 +5637,18 @@ class MainWindow(QMainWindow):
         self.home_layout.addWidget(self.file_transfer_container, 1, 1)
 
     def update_diagnostics(self, top_output, ping_output):
-        if top_output == "Connection Error":
-            error_html = "<h3 style='color: #ff5555;'>System Status:</h3><pre>Connection Error: Unable to fetch system status.</pre>"
-            self.top_output_display.setHtml(error_html)
-            self.online_status_label.setText("<h3 style='color: #ff5555;'>BSTG Connection Status:</h3><p>Offline</p>")
-        else:
-            top_output_html = f"<h3 style='color: #8be9fd;'>System Status:</h3><pre>{top_output}</pre>"
-            self.top_output_display.setHtml(top_output_html)
+        pass
+        # if top_output == "Connection Error":
+        #     error_html = "<h3 style='color: #ff5555;'>System Status:</h3><pre>Connection Error: Unable to fetch system status.</pre>"
+        #     self.top_output_display.setHtml(error_html)
+        #     self.online_status_label.setText("<h3 style='color: #ff5555;'>BSTG Connection Status:</h3><p>Offline</p>")
+        # else:
+        #     top_output_html = f"<h3 style='color: #8be9fd;'>System Status:</h3><pre>{top_output}</pre>"
+        #     self.top_output_display.setHtml(top_output_html)
 
-            online_status = "Online" if "time=" in ping_output else "Offline"
-            online_status_html = f"<h3 style='color: #8be9fd;'>BSTG Connection Status:</h3><p>{online_status}</p>"
-            self.online_status_label.setText(online_status_html)
+        #     online_status = "Online" if "time=" in ping_output else "Offline"
+        #     online_status_html = f"<h3 style='color: #8be9fd;'>BSTG Connection Status:</h3><p>{online_status}</p>"
+        #     self.online_status_label.setText(online_status_html)
 
 
     def add_home_cards(self):

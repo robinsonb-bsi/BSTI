@@ -31,7 +31,7 @@ class NonCoreUpdater:
                 "value": "Systems Administrator"
             }
         ]
-
+    
     def prepare_fields(self, current_fields: Union[Dict[str, Any], List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
         if isinstance(current_fields, dict):
             current_field_dict = current_fields
@@ -41,6 +41,7 @@ class NonCoreUpdater:
             log.error(f"Unexpected format for current_fields: {current_fields}")
             return []
 
+        # Remove any existing 'merged_assets' field and ensure no extra fields are included
         if "merged_assets" in current_field_dict:
             merged_assets_value = current_field_dict["merged_assets"]
             merged_assets_value["key"] = "merged_assets"
@@ -51,30 +52,17 @@ class NonCoreUpdater:
         for field in new_fields:
             current_field_dict[field["key"]] = field
 
-        final_fields = [field for field in current_field_dict.values() if field and "id" not in field]
+        return [
+            {
+                "key": field.get("key"),
+                "label": field.get("label"),
+                "value": field.get("value")
+            }
+            for field in current_field_dict.values()
+            if all(k in field for k in ("key", "label", "value"))
+        ]
 
-        return final_fields
     
-    # def prepare_fields(self, current_fields: Union[Dict[str, Any], List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
-    #     if isinstance(current_fields, dict):
-    #         current_field_dict = current_fields
-    #     elif isinstance(current_fields, list):
-    #         current_field_dict = {field["key"]: field for field in current_fields}
-    #     else:
-    #         log.error(f"Unexpected format for current_fields: {current_fields}")
-    #         return []
-
-    #     if "merged_assets" in current_field_dict:
-    #         merged_assets_value = current_field_dict["merged_assets"]
-    #         merged_assets_value["key"] = "merged_assets"
-    #         if "sort_order" in merged_assets_value:
-    #             del merged_assets_value["sort_order"]
-
-    #     new_fields = self.get_new_fields()
-    #     for field in new_fields:
-    #         current_field_dict[field["key"]] = field
-
-    #     return [field for field in current_field_dict.values() if field]
 
     def send_graphql_request(self, flaw_id: str, final_fields: List[Dict[str, Any]]) -> bool:
         url = self.url_manager.get_graphql_url()
@@ -88,7 +76,190 @@ class NonCoreUpdater:
                 'findingId': int(flaw_id),
                 'reportId': int(self.args.report_id),
             },
-            "query": "mutation FindingUpdate($clientId: Int!, $data: FindingUpdateInput!, $findingId: Float!, $reportId: Int!) {\n  findingUpdate(\n    clientId: $clientId\n    data: $data\n    findingId: $findingId\n    reportId: $reportId\n  ) {\n    ... on FindingUpdateSuccess {\n      finding {\n        ...FindingFragment\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}\n\nfragment FindingFragment on Finding {\n  assignedTo\n  closedAt\n  createdAt\n  code_samples {\n    caption\n    code\n    id\n    __typename\n  }\n  common_identifiers {\n    CVE {\n      name\n      id\n      year\n      link\n      __typename\n    }\n    CWE {\n      name\n      id\n      link\n      __typename\n    }\n    __typename\n  }\n  description\n  exhibits {\n    assets {\n      asset\n      id\n      __typename\n    }\n    caption\n    exhibitID\n    index\n    type\n    __typename\n  }\n  fields {\n    key\n    label\n    value\n    __typename\n  }\n  flaw_id\n  includeEvidence\n  recommendations\n  references\n  scores\n  selectedScore\n  severity\n  source\n  status\n  subStatus\n  tags\n  title\n  visibility\n  calculated_severity\n  risk_score {\n    CVSS3_1 {\n      overall\n      vector\n      subScore {\n        base\n        temporal\n        environmental\n        __typename\n      }\n      __typename\n    }\n    CVSS3 {\n      overall\n      vector\n      subScore {\n        base\n        temporal\n        environmental\n        __typename\n      }\n      __typename\n    }\n    CVSS2 {\n      overall\n      vector\n      subScore {\n        base\n        temporal\n        __typename\n      }\n      __typename\n    }\n    CWSS {\n      overall\n      vector\n      subScore {\n        base\n        environmental\n        attackSurface\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n  hackerOneData {\n    bountyAmount\n    programId\n    programName\n    remoteId\n    __typename\n  }\n  snykData {\n    issueType\n    pkgName\n    issueUrl\n    identifiers {\n      CVE\n      CWE\n      __typename\n    }\n    exploitMaturity\n    patches\n    nearestFixedInVersion\n    isMaliciousPackage\n    violatedPolicyPublicId\n    introducedThrough\n    fixInfo {\n      isUpgradable\n      isPinnable\n      isPatchable\n      isFixable\n      isPartiallyFixable\n      nearestFixedInVersion\n      __typename\n    }\n    __typename\n  }\n  edgescanData {\n    id\n    portal_url\n    details {\n      html\n      id\n      orginal_detail_hash\n      parameter_name\n      parameter_type\n      port\n      protocol\n      screenshot_urls {\n        file\n        id\n        medium_thumb\n        small_thumb\n        __typename\n      }\n      src\n      type\n      __typename\n    }\n    __typename\n  }\n  __typename\n}\n"
+            "query": """
+            mutation FindingUpdate($clientId: Int!, $data: FindingUpdateInput!, $findingId: Float!, $reportId: Int!) {
+            findingUpdate(
+                clientId: $clientId
+                data: $data
+                findingId: $findingId
+                reportId: $reportId
+            ) {
+                ... on FindingUpdateSuccess {
+                finding {
+                    ...FindingFragment
+                    __typename
+                }
+                __typename
+                }
+                __typename
+            }
+            }
+
+            fragment FindingFragment on Finding {
+            assignedTo
+            closedAt
+            createdAt
+            code_samples {
+                caption
+                code
+                id
+                __typename
+            }
+            common_identifiers {
+                CVE {
+                name
+                id
+                year
+                link
+                __typename
+                }
+                CWE {
+                name
+                id
+                link
+                __typename
+                }
+                __typename
+            }
+            description
+            exhibits {
+                assets {
+                asset
+                id
+                __typename
+                }
+                caption
+                exhibitID
+                index
+                type
+                __typename
+            }
+            fields {
+                key
+                label
+                value
+                __typename
+            }
+            flaw_id
+            includeEvidence
+            recommendations
+            references
+            scores
+            selectedScore
+            severity
+            source
+            status
+            subStatus
+            tags
+            title
+            visibility
+            calculated_severity
+            risk_score {
+                CVSS3_1 {
+                overall
+                vector
+                subScore {
+                    base
+                    temporal
+                    environmental
+                    __typename
+                }
+                __typename
+                }
+                CVSS3 {
+                overall
+                vector
+                subScore {
+                    base
+                    temporal
+                    environmental
+                    __typename
+                }
+                __typename
+                }
+                CVSS2 {
+                overall
+                vector
+                subScore {
+                    base
+                    temporal
+                    __typename
+                }
+                __typename
+                }
+                CWSS {
+                overall
+                vector
+                subScore {
+                    base
+                    environmental
+                    attackSurface
+                    __typename
+                }
+                __typename
+                }
+                __typename
+            }
+            hackerOneData {
+                bountyAmount
+                programId
+                programName
+                remoteId
+                __typename
+            }
+            snykData {
+                issueType
+                pkgName
+                issueUrl
+                identifiers {
+                CVE
+                CWE
+                __typename
+                }
+                exploitMaturity
+                patches
+                nearestFixedInVersion
+                isMaliciousPackage
+                violatedPolicyPublicId
+                introducedThrough
+                fixInfo {
+                isUpgradable
+                isPinnable
+                isPatchable
+                isFixable
+                isPartiallyFixable
+                nearestFixedInVersion
+                __typename
+                }
+                __typename
+            }
+            edgescanData {
+                id
+                portal_url
+                details {
+                html
+                id
+                orginal_detail_hash
+                parameter_name
+                parameter_type
+                port
+                protocol
+                screenshot_urls {
+                    file
+                    id
+                    medium_thumb
+                    small_thumb
+                    __typename
+                }
+                src
+                type
+                __typename
+                }
+                __typename
+            }
+            __typename
+            }
+            """
         }
         try:
             response = self.request_handler.post(url, json=payload)
@@ -99,18 +270,18 @@ class NonCoreUpdater:
                 response_json = response.json()
                 errors = response_json.get('errors', [])
                 for error in errors:
-                    message = error.get('message', '').lower()  # Convert the message to lowercase
-                    if "owasp testing category" in message:  # Use lowercase for comparison
+                    message = error.get('message', '').lower()
+                    if "owasp testing category" in message:
                         log.debug(f'Skipped OWASP Testing Category for flaw ID {flaw_id}')
                     else:
                         log.error(f'Update failed for flaw: {flaw_id}')
-                        print(response.content)
+                        log.debug(response.content)
 
                 return False
         except requests.RequestException as e:
             log.error(f"Error occurred while updating fields for flaw ID {flaw_id}: {str(e)}")
             return False
-        
+
 
     def update_flaw_fields(self, flaw_id: str, current_fields: Union[Dict[str, Any], List[Dict[str, Any]]]) -> bool:
         final_fields = self.prepare_fields(current_fields)

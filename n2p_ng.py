@@ -14,7 +14,7 @@ import pretty_errors
 from helpers import (
     ArgumentParser, log, ArgumentValidator, PlextracHandler, RequestHandler, URLManager,
     ConfigLoader, NessusToPlextracConverter, FlawUpdater, NonCoreUpdater, 
-    DescriptionProcessor, ClientReportGen, GenConfig, FlawLister
+    DescriptionProcessor, ClientReportGen, GenConfig, FlawLister, ClientOverrides
 )
 
 # Disable SSL warnings
@@ -103,6 +103,13 @@ class MainEngine:
         if self.args.non_core:
             self.non_core_updater = NonCoreUpdater(self.url_manager, self.request_handler, self.args)
         self.screenshot_uploader = FlawUpdater(self.converter, self.args, self.request_handler, self.url_manager)
+
+    def apply_client_overrides(self):
+        """Apply client-specific configurations using ClientOverrides."""
+        log.info("Applying client-specific configurations...")
+        client_overrides = ClientOverrides(self.url_manager, self.request_handler, self.args)
+        client_overrides.replace_engine()
+        log.success("Client-specific configurations applied.")
 
 
     def run(self):
@@ -244,6 +251,8 @@ if __name__ == "__main__":
         validator.print_banner()
         engine = MainEngine(args)
         engine.run()
+        if args.client_config:
+            engine.apply_client_overrides()
         end_time = time.time()
 
         elapsed_time = end_time - start_time
