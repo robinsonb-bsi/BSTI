@@ -36,8 +36,7 @@ class ArgumentParser:
         parser.add_argument(
             '-cf', '--client_config',
             help='Path to the TOML configuration file for client settings',
-            type=str,
-            required=True
+            type=str
         )
 
         self.args = parser.parse_args()
