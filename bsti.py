@@ -873,8 +873,9 @@ class NMBRunnerThread(QThread):
             self.process.send_signal(signal.SIGINT)
 
 class N2PArgsDialog(QDialog):
-    def __init__(self, parent=None, default_client_id="", default_report_id=""):
+    def __init__(self, parent=None, default_client_id="", default_report_id="", client_overrides_dir="client_overrides"):
         super(N2PArgsDialog, self).__init__(parent)
+        self.client_overrides_dir = client_overrides_dir
         self.layout = QVBoxLayout(self)
         self.layout.setSpacing(10)
         self.layout.setContentsMargins(10, 10, 10, 10)
@@ -908,6 +909,10 @@ class N2PArgsDialog(QDialog):
         self.screenshot_dir_layout.addWidget(self.screenshot_dir_edit)
         self.screenshot_dir_layout.addWidget(self.screenshot_dir_browse_button)
 
+        # Add Client TOML Dropdown
+        self.toml_dropdown = QComboBox(self)
+        self.populate_toml_dropdown()
+
         self.target_plextrac_edit = QComboBox(self)
         self.target_plextrac_edit.addItems(["report"])
         self.non_core_check = QCheckBox("Non-core custom fields", self)
@@ -927,6 +932,8 @@ class N2PArgsDialog(QDialog):
         self.layout.addLayout(self.directory_layout)
         self.layout.addWidget(QLabel("Screenshot Directory"))
         self.layout.addLayout(self.screenshot_dir_layout)
+        self.layout.addWidget(QLabel("Client Override File"))
+        self.layout.addWidget(self.toml_dropdown)
         self.layout.addWidget(QLabel("Target Plextrac"))
         self.layout.addWidget(self.target_plextrac_edit)
         self.layout.addWidget(self.non_core_check)
@@ -984,9 +991,15 @@ class N2PArgsDialog(QDialog):
         if directory:
             self.screenshot_dir_edit.setText(directory)
 
+    def populate_toml_dropdown(self):
+        """Populate the dropdown with TOML files from client_overrides directory"""
+        if os.path.isdir(self.client_overrides_dir):
+            toml_files = [f for f in os.listdir(self.client_overrides_dir) if f.endswith('.toml')]
+            self.toml_dropdown.addItem("")  # Empty option for no file selected
+            self.toml_dropdown.addItems(toml_files)
 
     def get_arguments(self):
-        # Return the entered arguments
+        """Return the entered arguments."""
         return {
             'username': self.username_edit.text(),
             'password': self.password_edit.text(),
@@ -997,7 +1010,9 @@ class N2PArgsDialog(QDialog):
             'targettedplextrac': self.target_plextrac_edit.currentText(),
             'screenshot_dir': self.screenshot_dir_edit.text(),
             'noncore': self.non_core_check.isChecked(),
+            'client_config': os.path.join(self.client_overrides_dir, self.toml_dropdown.currentText()) if self.toml_dropdown.currentText() else None
         }
+
 
 class CredentialsDialog(QDialog):
     def __init__(self, parent=None):
@@ -2469,6 +2484,12 @@ class NucleiWorker(QThread):
             # Get the correct path to the nuclei binary based on the OS
             nuclei_path = self.get_nuclei_path()
 
+            # Check if the nuclei binary exists at the specified path
+            if not os.path.exists(nuclei_path):
+                error_message = f"Nuclei binary not found at {nuclei_path}. Please check the path."
+                self.nuclei_finished.emit(f"Error: {error_message}")
+                return
+
             # Build the command with the correct nuclei binary
             command = [nuclei_path, "-u", self.target_url, "-json-export", self.output_file]
 
@@ -3928,10 +3949,6 @@ class MainWindow(QMainWindow):
 
 
 
-
-
-
-
     def on_finding_double_click(self, row, column):
         # Get the finding data stored in the table
         finding = self.results_table.item(row, 0).data(Qt.UserRole)
@@ -4367,9 +4384,10 @@ class MainWindow(QMainWindow):
             self.nuclei_results = results  # Store results for report generation
             self.populate_nuclei_table(results)
             os.remove("output.json")
-
-        except json.JSONDecodeError:
-            self.nuclei_output.append("Error: Invalid JSON format.")
+        except:
+            error_message = f"Nuclei binary not found. Please use the addon menu"
+            QMessageBox.critical(self, "Nuclei Error", error_message)
+        
 
         # Re-enable the button and update text when finished
         self.nuclei_run_button.setText("Run Nuclei")
@@ -4735,12 +4753,15 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Information", 
                             f"Client ID ({self.client_id}) and Report ID ({self.report_id}) have been pre-filled based on your latest report generation.")
         
+        # Open the argument dialog, pre-filling the client and report IDs
         args_dialog = N2PArgsDialog(parent=self, default_client_id=self.client_id, default_report_id=self.report_id)
         if args_dialog.exec_() == QDialog.Accepted:
             args = args_dialog.get_arguments()
 
             # Prepare the command
             command = ["python", "n2p_ng.py"]
+
+            # Add standard arguments (excluding the noncore checkbox)
             for arg, value in args.items():
                 if arg != 'noncore' and value:
                     command.extend([f"--{arg}", value])
@@ -4749,8 +4770,13 @@ class MainWindow(QMainWindow):
             if args['noncore']:
                 command.append('--noncore')
 
+            # Check if the '-cf' argument is in the dialog results (TOML config file)
+            if 'cf' in args and args['cf']:
+                command.extend(['cf', args['cf']])
+
             # Execute in a new tab
             self.execute_n2p_in_tab(command, "Nessus2plextrac-ng")
+
 
 
     def execute_n2p_in_tab(self, command, tab_name):
