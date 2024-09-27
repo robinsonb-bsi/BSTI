@@ -30,7 +30,7 @@ class ClientOverrides:
         try:
             config = toml.load(toml_file)
             severity_map = {}
-            for finding in config.get('findings', []):
+            for finding in config.get('finding', []):
                 title = finding.get('title')
                 severity = finding.get('severity')
                 if title and severity:

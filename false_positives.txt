@@ -11,3 +11,4 @@ The App uses the encryption mode CBC with PKCS5/PKCS7 padding. This configuratio
 Application signed with debug certificate
 This app listens to Clipboard changes. Some malware also listen to Clipboard changes.
 This App copies data to clipboard. Sensitive data should not be copied to clipboard as other applications can access it.
+Application vulnerable to Janus Vulnerability
