@@ -35,7 +35,8 @@ class FlawUpdater:
             "internal": "internal",
             "external": "external",
             "web": "web",
-            "surveillance": "surveillance"
+            "surveillance": "surveillance",
+            "mobile": "mobile"
         }
         self.mode = mode_map.get(self.args.scope, "internal")
 
@@ -344,6 +345,7 @@ class FlawUpdater:
             "external": "(External) ",
             "web": "(Web) ",
             "surveillance": "(Surveillance) ",
+            "mobile": "(Mobile) ",
             "internal": "" 
         }
         prefix = prefix_map.get(self.mode, "")

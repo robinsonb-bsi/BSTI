@@ -5,7 +5,6 @@
 import json
 import csv
 from helpers.custom_logger import log
-from PyInquirer import prompt
 import os
 import argparse
 import atexit
@@ -89,80 +88,39 @@ class PluginManager:
 
     def confirm_exit(self):
         if self.temp_changes:
-                exit_confirm = [
-                    {
-                        'type': 'confirm',
-                        'name': 'exit_confirm',
-                        'message': 'You have pending changes. Do you really want to exit without saving?',
-                    }
-                ]
-                if prompt(exit_confirm).get('exit_confirm'):
-                    sys.exit()
+            exit_confirm = input('You have pending changes. Do you really want to exit without saving? (y/n): ')
+            if exit_confirm.lower() in ['y', 'yes']:
+                sys.exit()
         else:
             sys.exit()
 
-
     def remove_plugin(self):
-        # Load plugin names from CSV
         plugin_names = self.get_plugin_names_from_csv()
-
-        # Ask the user to choose a category
         categories = list(self.config['plugins'].keys())
-        category_question = {
-            'type': 'list',
-            'name': 'category_name',
-            'message': 'Select the category from which to remove plugins:',
-            'choices': categories + ['Cancel'],
-        }
-        category_answer = prompt(category_question)
-        category_name = category_answer.get('category_name')
+        category_name = self._prompt_choice('Select the category from which to remove plugins:', categories + ['Cancel'])
 
-        # Check for 'Cancel' selection and return if selected
         if category_name == 'Cancel':
             return
 
-        # Ask for a filter string
-        filter_question = {
-            'type': 'input',
-            'name': 'filter_string',
-            'message': 'Enter a filter string to narrow down the plugins (leave empty for all):'
-        }
-        filter_answer = prompt(filter_question)
-        filter_string = filter_answer.get('filter_string', '').lower()
-
-        # Retrieve the current plugins in the category
+        filter_string = input('Enter a filter string to narrow down the plugins (leave empty for all): ').lower()
         current_plugin_ids = self.config['plugins'].get(category_name, {}).get('ids', [])
-
-        # Filter the plugins by name using the filter string against the CSV data
         filtered_plugins = [
             {'id': plugin_id, 'name': plugin_names[plugin_id]}
             for plugin_id in current_plugin_ids
             if plugin_id in plugin_names and filter_string in plugin_names[plugin_id].lower()
         ]
 
-        # Check if we have plugins after filtering
         if not filtered_plugins:
             log.info("No plugins matched your filter. Please try again with a different filter string.")
             return
 
-        # Create choices for plugin removal, showing both plugin ID and name
         choices_for_plugin_removal = [
-            {'name': f"{plugin['id']} - {plugin['name']}"}
-            for plugin in filtered_plugins
+            f"{plugin['id']} - {plugin['name']}" for plugin in filtered_plugins
         ]
 
-        # Ask which plugins to remove
-        remove_plugin_question = {
-            'type': 'checkbox',
-            'name': 'plugin_selections',
-            'message': f"Select the Plugin IDs to remove from '{category_name}':",
-            'choices': choices_for_plugin_removal
-        }
-        plugin_answers = prompt(remove_plugin_question)
-        plugin_selections = plugin_answers.get('plugin_selections')
+        selected_plugins = self._prompt_choices('Select the Plugin IDs to remove from \'{}\':'.format(category_name), choices_for_plugin_removal)
 
-        # Proceed with removal
-        for plugin_selection in plugin_selections:
+        for plugin_selection in selected_plugins:
             plugin_id = plugin_selection.split(" - ")[0]
             if plugin_id in current_plugin_ids:
                 current_plugin_ids.remove(plugin_id)
@@ -170,93 +128,22 @@ class PluginManager:
             else:
                 log.warning(f"Plugin {plugin_id} not found in category {category_name}.")
 
-        # Update temp_changes to track this operation
         self.temp_changes[category_name] = current_plugin_ids
 
 
-
-
-
-    def get_plugin_names_from_csv(self):
-        plugin_names = {}
-        try:
-            with open(self.csv_path, mode='r', encoding='utf-8') as csv_file:
-                csv_reader = csv.DictReader(csv_file)
-                for row in csv_reader:
-                    plugin_id = row.get('Plugin ID')
-                    plugin_name = row.get('Name')
-                    if plugin_id and plugin_name:  # Ensure there is a valid ID and name
-                        plugin_names[plugin_id] = plugin_name
-        except FileNotFoundError:
-            log.error(f"CSV file {self.csv_path} not found.")
-        return plugin_names
-
-
-    def cli_interaction(self, non_merged_plugins):        
-        action_map = {
-            'Add Plugin': self.add_plugin,
-            'Simulate Findings': self.simulate_findings,
-            'Remove Plugin': self.remove_plugin,
-            'View Changes': self.view_changes,
-            'Write Changes': self.write_changes,
-            'Clear Changes': self.clear_changes,
-            'Exit': self.confirm_exit
-        }
-
-        while True:
-            questions = [
-                {
-                    'type': 'list',
-                    'name': 'main_menu',
-                    'message': 'Select an action:',
-                    'choices': list(action_map.keys())
-                }
-            ]
-
-            answers = prompt(questions)
-            action = answers.get('main_menu')
-            
-            if action in action_map:
-                if action == 'Add Plugin':
-                    action_map[action](non_merged_plugins)
-                else:
-                    action_map[action]()
-
     def add_plugin(self, non_merged_plugins):
         available_plugins = [plugin for plugin in non_merged_plugins if plugin['id'] not in sum(self.temp_changes.values(), [])]
-        
-        # Sorting available_plugins by 'name' in alphabetical order
         available_plugins = sorted(available_plugins, key=lambda x: x['name'])
-        
-        # Adding a 'Main Menu' choice
-        choices_for_plugin_selections = [{'name': f"{plugin['id']} - {plugin['name']}"} for plugin in available_plugins]
+        choices_for_plugin_selections = [f"{plugin['id']} - {plugin['name']}" for plugin in available_plugins]
 
-        add_plugin_questions = [
-            {
-                'type': 'checkbox',
-                'name': 'plugin_selections',
-                'message': 'Select the Plugin IDs to add:',
-                'choices': choices_for_plugin_selections
-            },
-            {
-                'type': 'list',
-                'name': 'category_name',
-                'message': 'Select a category:',
-                'choices': list(self.config['plugins'].keys()) + ['Main Menu'],
-            }
-        ]
-        add_plugin_answers = prompt(add_plugin_questions)
-        plugin_selections = add_plugin_answers.get('plugin_selections')
-        category_name = add_plugin_answers.get('category_name')
-        
-        # Check for 'Main Menu' selection and return if selected
+        plugin_selections = self._prompt_choices('Select the Plugin IDs to add:', choices_for_plugin_selections)
+        category_name = self._prompt_choice('Select a category:', list(self.config['plugins'].keys()) + ['Main Menu'])
+
         if 'Main Menu' in plugin_selections or category_name == 'Main Menu':
-            return 
-        
-        # Extract only the IDs for processing
+            return
+
         plugin_ids = [selection.split(" - ")[0] for selection in plugin_selections]
-        
-        # Validation and addition logic
+
         if plugin_ids and category_name:
             if self.temp_changes is None:
                 self.temp_changes = {}
@@ -269,6 +156,37 @@ class PluginManager:
                     log.success(f"Temporarily added plugin {plugin_id} to category {category_name}. Use 'Write Changes' to save.")
                 else:
                     log.warning(f"Plugin {plugin_id} is already in category {category_name}.")
+
+    def _prompt_choice(self, message, choices):
+        print(f"\n{message}")
+        for i, choice in enumerate(choices, 1):
+            print(f"{i}. {choice}")
+        while True:
+            try:
+                selection = int(input(f"Select an option (1-{len(choices)}): "))
+                if 1 <= selection <= len(choices):
+                    return choices[selection - 1]
+                else:
+                    print("Invalid selection. Try again.")
+            except ValueError:
+                print("Invalid input. Please enter a number.")
+
+    def _prompt_choices(self, message, choices):
+        print(f"\n{message}")
+        for i, choice in enumerate(choices, 1):
+            print(f"{i}. {choice}")
+        selections = []
+        while True:
+            try:
+                input_selections = input("Select options by number, separated by commas (e.g., 1,2,3): ").split(',')
+                selections = [choices[int(i.strip()) - 1] for i in input_selections if i.strip().isdigit() and 1 <= int(i.strip()) <= len(choices)]
+                if selections:
+                    return selections
+                else:
+                    print("No valid selections. Try again.")
+            except (IndexError, ValueError):
+                print("Invalid input. Please enter valid numbers.")
+
 
     def clear_changes(self):
         self.temp_changes.clear()
@@ -306,6 +224,23 @@ class PluginManager:
     def cleanup(self):
         if os.path.exists(self.TEMP_FILE):
             os.remove(self.TEMP_FILE)
+
+
+    def get_plugin_names_from_csv(self) -> dict:
+        """Returns a dictionary of plugin names from the CSV file."""
+        plugin_names = {}
+        try:
+            with open(self.csv_path, mode='r', encoding='utf-8') as csv_file:
+                csv_reader = csv.DictReader(csv_file)
+                for row in csv_reader:
+                    plugin_id = row.get('Plugin ID')
+                    name = row.get('Name')
+                    if plugin_id and name:
+                        plugin_names[plugin_id] = name
+        except FileNotFoundError:
+            log.error(f"File {self.csv_path} not found.")
+            sys.exit(1)
+        return plugin_names
 
 
     def simulate_findings(self):
@@ -348,8 +283,34 @@ if __name__ == "__main__":
         non_merged_plugins = [{'id': finding.split(", ")[0].split(": ")[1],
                             'name': finding.split(", ")[1].split(": ")[1]} for finding in individual_findings]
 
-        # CLI interaction for additional plugins
-        temp_changes = manager.cli_interaction(non_merged_plugins=non_merged_plugins)
+        # Directly handle CLI interactions
+        action_map = {
+            'Add Plugin': manager.add_plugin,
+            'Simulate Findings': manager.simulate_findings,
+            'Remove Plugin': manager.remove_plugin,
+            'View Changes': manager.view_changes,
+            'Write Changes': manager.write_changes,
+            'Clear Changes': manager.clear_changes,
+            'Exit': manager.confirm_exit
+        }
+
+        while True:
+            print("\nSelect an action:")
+            for i, action in enumerate(action_map.keys(), 1):
+                print(f"{i}. {action}")
+
+            try:
+                choice = int(input(f"Select an option (1-{len(action_map)}): "))
+                if 1 <= choice <= len(action_map):
+                    action = list(action_map.keys())[choice - 1]
+                    if action == 'Add Plugin':
+                        action_map[action](non_merged_plugins)
+                    else:
+                        action_map[action]()
+                else:
+                    print("Invalid selection. Try again.")
+            except ValueError:
+                print("Invalid input. Please enter a number.")
     
     except KeyboardInterrupt:
         log.error("Keyboard Interrupt. Exiting...")

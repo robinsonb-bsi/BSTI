@@ -30,7 +30,8 @@ class NessusToPlextracConverter:
             "internal": "internal_finding",
             "external": "external_finding",
             "surveillance": "surveillance_finding",
-            "web": "webapp_finding"
+            "web": "webapp_finding",
+            "mobile": "mobileapp_finding"
         }
 
     def build_plugin_categories(self) -> Dict[str, str]:
@@ -134,7 +135,7 @@ class NessusToPlextracConverter:
         return None
 
     @staticmethod
-    def map_severity_to_tags(severity: str) -> (str, str):
+    def map_severity_to_tags(severity: str) -> (str, str): # type: ignore
         """
         Map severity levels to tags for priority and complexity.
 
@@ -166,6 +167,7 @@ class NessusToPlextracConverter:
         - "external": "external_finding"
         - "surveillance": "surveillance_finding"
         - "web": "webapp_finding"
+        - "mobile": "mobileapp_finding"
 
         :return: Tag as a string.
         """
@@ -182,6 +184,7 @@ class NessusToPlextracConverter:
         - "external": Prefixes with "(External)"
         - "web": Prefixes with "(Web)"
         - "surveillance": Prefixes with "(Surveillance)"
+        - "mobile": Prefixes with "(Mobile)"
         - Other/internal: No prefix
 
         :return: Title prefix as a string.
@@ -190,6 +193,7 @@ class NessusToPlextracConverter:
             "external": "(External) ",
             "web": "(Web) ",
             "surveillance": "(Surveillance) ",
+            "mobile": "(Mobile) ",
             "internal": ""
         }
         return prefix_map.get(self.mode, "")

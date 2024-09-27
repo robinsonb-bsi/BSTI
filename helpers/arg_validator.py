@@ -38,6 +38,7 @@ class ArgumentValidator:
         self._print_item("Scope", self.args.scope)
         self._print_item("Screenshot Directory", self.args.screenshot_dir)
         self._print_item("Non-Core Custom Fields", self.args.non_core)
+        self._print_item("Custom Client Configuration", self.args.client_config)
         self._print_item("Report Link: ", f"https://{self.args.target_plextrac}.kevlar.bulletproofsi.net/client/{self.args.client_id}/report/{self.args.report_id}")
         self._print_header_footer()
         print("\n")

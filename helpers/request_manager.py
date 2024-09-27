@@ -51,3 +51,13 @@ class RequestHandler:
             raise ValueError("The request timed out after 5 minutes.")
         except requests.RequestException as e:
             raise ValueError(f"An error occurred: {e}")
+        
+    def delete(self, url: str, headers: Optional[Dict[str, str]] = None) -> requests.Response:
+        self._set_headers(headers)
+        try:
+            response = self.session.delete(url, headers=self.headers, timeout=300)
+            return self._validate_response(response)
+        except requests.Timeout:
+            raise ValueError("The request timed out after 5 minutes.")
+        except requests.RequestException as e:
+            raise ValueError(f"An error occurred: {e}")
