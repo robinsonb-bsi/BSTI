@@ -229,14 +229,8 @@ def parse_arguments():
     parser = argparse.ArgumentParser(
         usage = "nmb.py [OPTIONS]",
         formatter_class = argparse.RawTextHelpFormatter,
-        epilog = "Examples:\n" \
-                 "nmb.py -d storm -c myclient -m deploy -s core\n" \
-                 "nmb.py -d localhost -c myclient -m create\n" \
-                 "nmb.py -d 10.88.88.101 -c myclient -m pause\n" \
-                 "nmb.py -d strange -c myclient -m resume -o /home/drone/Downloads\n" \
-                 "nmb.py -m internal -d ironman \n" \
-                 "nmb.py -m internal --local\n" \
-                 "nmb.py -m external -d pendrone\n" 
+        epilog = "Example:\n" \
+                 "nmb.py -d storm -c myclient -m deploy -s core -u bstg -p password --csv-file path/to/csv\n" \
     )
     parser.add_argument("-m", "--mode", required=False, choices=["deploy","create","launch","pause","resume","monitor","export", "external", "internal", "regen"], help="" \
         "choose mode to run Nessus:\n" \
@@ -267,8 +261,6 @@ def parse_arguments():
     parser.add_argument("-ex", "--external", dest="external", required=False, action="store_const", const=True, help="Enable external mode")
     parser.add_argument("-l", "--local", dest="local", required=False, action="store_const", const=True, help="run manual checks on your local machine instead of over ssh")
     parser.add_argument("--discovery", dest="discovery", required=False, action="store_const", const=True, help="Enable discovery scan prior to running nessus.")
-    parser.add_argument("--eyewitness", dest="run_eyewitness", required=False, action="store_const", const=True, help="Enable eyewitness mode for lackey")
-    parser.add_argument("--guess", dest="enable_guessing", required=False, action="store_const", const=True, help="Enable guess mode for lackey")
 
     args = parser.parse_args()
     return args
