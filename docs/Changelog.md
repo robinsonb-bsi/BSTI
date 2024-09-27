@@ -1,4 +1,12 @@
-# v0.1
+---
+layout: default
+title: Changelog
+nav_order: 6
+---
+
+# Changelog
+
+## v0.1
 - log viewer & session logging
 - file transfer tab
 - reworked menu bar
@@ -22,17 +30,16 @@
 - pause button for nmb
 - metadata for modules to map to nessus findings, then convert to md5 when saving the screenshot
 - plugin_manager and create report functionality added
-# v1.1
+## v1.1
 - fixed n2p import issue 
 - added survilence and webapp tags 
 - started zeus integration 
 - added prefixes to survilence and webapp => prevents flawID from duplicating
 - Potentially Unnecessary or Insecure Services added as plugin category
-# v1.2
+## v1.2
 - fixed n2p bug with non-core custom fields 
 - added full mobile testing support for workflows, automated scans, export in N2P format
 - addons menu option to download apk-mitmv2 and zeus binaries per platform
 - dropped all packages needing python3.9 - tested on 3.10 and working fine 
 - added mobile tag support for n2p 
-- screenshot editor 
 - android testing support tools, inspector, validator, decompiler etc.
