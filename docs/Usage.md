@@ -7,7 +7,6 @@ nav_order: 3
 ## 🎮 Using BSTI
 
 ```bash
-
 python bsti.py
 ```
 **Note:** BSTI has only been tested on window, macOS users are encouraged to report bugs or issues when found.

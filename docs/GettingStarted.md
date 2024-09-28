@@ -6,7 +6,7 @@ nav_order: 2
 
 # 🚀 Getting Started
 
-### ✔️ Prerequisites
+### Prerequisites
 
 Since BSTI v1.2 - ADB (Android Debug Bridge) is now required.
 
@@ -36,5 +36,4 @@ Install the required Python packages:
 
 ``` bash
 pip install -r requirements.txt
-
 ```
