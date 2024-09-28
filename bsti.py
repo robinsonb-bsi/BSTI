@@ -4655,12 +4655,10 @@ class MainWindow(QMainWindow):
         self.init_term_UI()
 
     def open_documentation(self):
-        # Path to the documentation file
-        documentation_file = os.path.join("wiki", "index.html")
-        
-        # Open the file in the default web browser using QDesktopServices
-        url = QUrl.fromLocalFile(os.path.abspath(documentation_file))
+        documentation_url = "https://fancyc-bsi.github.io/BSTI/"
+        url = QUrl(documentation_url)
         QDesktopServices.openUrl(url)
+
 
     def create_report(self):
         # Open the custom dialog
