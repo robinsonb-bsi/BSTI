@@ -27,14 +27,6 @@ This version of the script is intended to be used on a fresh report. If issues a
 
 If that fails then create a new report or worst case a new client.
 
-### Known Issues
-
-Currently, the merged assets custom fields for "Software Components Out of date and Vulnerable" is not fully refined. Some findings that should be grouped together are not.  
-
-Here is an example of this issue:
-
-![image](https://github.com/rouxn-bsi/reporting-toolset/assets/85493503/1e95f108-75e8-40f8-bec0-724a4adb1619)
-
 
 ---
 

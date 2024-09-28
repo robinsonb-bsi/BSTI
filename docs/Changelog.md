@@ -43,3 +43,6 @@ nav_order: 7
 - dropped all packages needing python3.9 - tested on 3.10 and working fine 
 - added mobile tag support for n2p 
 - android testing support tools, inspector, validator, decompiler etc.
+- migrate docs to jekyll
+- nuclei support
+- client specifc configs db start and n2p support

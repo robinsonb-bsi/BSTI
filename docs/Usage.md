@@ -9,7 +9,7 @@ nav_order: 3
 ```bash
 python bsti.py
 ```
-**Note:** BSTI has only been tested on window, macOS users are encouraged to report bugs or issues when found.
+**Note:** BSTI has only been tested on windows and linux, macOS users are encouraged to report bugs or issues when found.
 
 ### First Steps and Connecting
 To connect to a BSTG, click "Config" in the top-left corner, then "Configure new BSTG" and enter the login details.  
@@ -69,33 +69,8 @@ Adding the nessus command mapping metadata, the FIRST screenshot taken of the co
 ### Modules
 To create a new module click Modules -> Create New. This will create a new file in the Modules directory and automatically populate a template to use in the Module Editor tab.
 
-Currently BSTI supports modules written in bash, python, and json. Bash and Python scripts handle actions that can be performed in a single tab, while the JSON format has been setup to allow a single module to perform multiple actions in different tabs.
+Currently BSTI supports modules written in bash and python.
 
-
-#### JSON Format
-
-The format for the JSON file should be the following:
-
-```json
-{
-    "grouped": true,
-    "tabs": [
-        {
-            "name": "Responder",
-            "command": "echo 'test'"
-        },
-        {
-            "name": "Echo 1",
-            "command": "echo 'Tab 1' && sleep 3600"
-        },
-        {
-            "name": "Echo 2",
-            "command": "echo 'Tab 2' && sleep 3600"
-        }
-    ]
-}
-
-```
 
 #### Argument Metadata
 
@@ -185,7 +160,7 @@ Additionally, you can start/stop both a socks proxy and a local port forward fro
 ## Integrations
 BSTI is designed to be a complete solution, the tester should be able to perform most of their assessment from the application, and whatever they can't do - they can build within BSTI.
 
-BSTI includes custom version of both NMB and nessus2plextrac-ng with minimal dependencies (no more python3.9 requirements), the original versions can still be found in their current location - for now.
+BSTI includes custom version of both NMB and nessus2plextrac-ng with minimal dependencies (no more python3.9 requirements).
 
 #### Nessus2Plextrac-ng
 To use n2p-ng within BSTI, you need to ensure you installed the depends (mostly everyone should already have this installed)
