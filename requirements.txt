@@ -1,4 +1,3 @@
-pyaxmlparser>=0.3.24
 paramiko==3.4.1
 PyQt5==5.15.11
 htmlwebshot==0.1.2
