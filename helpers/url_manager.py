@@ -32,7 +32,6 @@ class URLManager:
         """
         str_segments = [str(segment) for segment in segments]
         return f"{self.v2_base_url}/{'/'.join(str_segments)}"
-
     
     def get_writeup_db_url(self, writeup_id: str) -> str:
         """Returns the URL for a specific write-up database."""
@@ -40,6 +39,10 @@ class URLManager:
     
     def get_update_finding_url(self, flaw_id: str) -> str:
         """Returns the URL for updating a specific finding."""
+        return self._construct_url('client', self.args.client_id, 'report', self.args.report_id, 'flaw', flaw_id)
+
+    def get_delete_finding_url(self, flaw_id: int) -> str:
+        """Returns the URL for deleting a specific finding."""
         return self._construct_url('client', self.args.client_id, 'report', self.args.report_id, 'flaw', flaw_id)
 
     def get_graphql_url(self) -> str:

@@ -14,3 +14,5 @@ from .desc_updater import DescriptionProcessor
 from .client_generator import ClientReportGen
 from .json_creator import GenConfig
 from .flaw_lister import FlawLister
+from .client_overrides import ClientOverrides
+from .search_replace import SearchReplacer

@@ -8,13 +8,8 @@ import os
 import pretty_errors
 from scripts.nessus import Nessus
 from scripts.creator import GenConfig
-from mobsf.mobsf import Mobber
 from scripts.lackey import Lackey
-from burp.burp import Burper
-from dotenv import load_dotenv
-from immuniweb.immuni import Immuniweb
 from scripts.logging_config import log
-load_dotenv()
 
 # ================== Utility Functions ==================
 
@@ -110,30 +105,6 @@ def main():
     creds_cache = CredentialsCache(username=args.username, password=args.password)
 
     mode_config = {
-        "mobsf": {
-            "required_args": ["mobsf_url", "mobsf_scan_type", "mobsf_app_name"],
-            "handler_class": Mobber,
-            "handler_args_providers": [lambda args: args.mobsf_url, 
-                                       lambda args: args.mobsf_scan_type, 
-                                       lambda args: args.mobsf_app_name]
-        },
-        "web": {
-            "required_args": ["burp_targets", "burp_url"],
-            "handler_class": Burper,
-            "handler_args_providers": [lambda args: args.burp_url or "http://127.0.0.1:1337", 
-                                       lambda _: os.getenv("BURP_API_KEY"),
-                                       lambda args: read_burp_targets(args.burp_targets),
-                                       lambda args: read_credentials(args.burp_target_user_file, args.burp_target_pass_file),
-                                       lambda args: args.burp_reattach or False]
-                                       
-        },
-        "immuniweb": {
-            "required_args": ["immuni_scan_type", "immuni_app_name"],
-            "handler_class": Immuniweb,
-            "handler_args_providers": [lambda _: os.getenv("IMMUNIWEB_API_KEY"), 
-                                       lambda args: args.immuni_scan_type, 
-                                       lambda args: args.immuni_app_name]
-        },
         "deploy": {
             "required_args": ["client", "drone", "project_type", "targets_file"],
             "handler_classes_with_args_providers": [
@@ -245,7 +216,7 @@ def main():
     mode_info = mode_config.get(args.mode)
     if not mode_info:
         log.error("Invalid mode selected")
-        print("Options are: [mobsf, web, deploy, create, launch, pause, resume, monitor, export, internal, external, immuniweb]")
+        print("Options are: [deploy, create, launch, pause, resume, monitor, export, internal, external]")
         sys.exit(1)
 
     handle_mode(args, args.mode, mode_config[args.mode]["required_args"], mode_config[args.mode])
@@ -258,20 +229,10 @@ def parse_arguments():
     parser = argparse.ArgumentParser(
         usage = "nmb.py [OPTIONS]",
         formatter_class = argparse.RawTextHelpFormatter,
-        epilog = "Examples:\n" \
-                 "nmb.py -d storm -c myclient -m deploy -s core\n" \
-                 "nmb.py -d localhost -c myclient -m create\n" \
-                 "nmb.py -d 10.88.88.101 -c myclient -m pause\n" \
-                 "nmb.py -d strange -c myclient -m resume -o /home/drone/Downloads\n" \
-                 "nmb.py -m internal -d ironman \n" \
-                 "nmb.py -m internal --local\n" \
-                 "nmb.py -m external -d pendrone\n" \
-                 "nmb.py -m web -tf targets.txt -bu http://192.168.2.1:1337\n" \
-                 "nmb.py -m mobsf -an com.example.apk -st apk -mu <mobsfURL>\n" \
-                 "nmb.py -m immuniweb --force -is ipa -ia com.example.ipa\n" \
-                 "nmb.py -m immuniweb -is apk -ia com.example.apk"
+        epilog = "Example:\n" \
+                 "nmb.py -d storm -c myclient -m deploy -s core -u bstg -p password --csv-file path/to/csv\n" \
     )
-    parser.add_argument("-m", "--mode", required=False, choices=["deploy","create","launch","pause","resume","monitor","export", "web", "mobsf", "external", "internal", "immuniweb", "regen"], help="" \
+    parser.add_argument("-m", "--mode", required=False, choices=["deploy","create","launch","pause","resume","monitor","export", "external", "internal", "regen"], help="" \
         "choose mode to run Nessus:\n" \
         "deploy: update settings, upload policy file, upload targets file, launch scan, monitor scan, export results, analyze results\n" \
         "create: update settings, upload policy file, upload targets files\n" \
@@ -280,11 +241,8 @@ def parse_arguments():
         "resume: resume scan, export results, analyze results\n" \
         "monitor: monitor scan\n" \
         "export: export scan results, analyze results\n" \
-        "mobsf: Download apk, static scan, export pdf report \n" \
-        "web: Start burpscan, monitor scan, export html, analyze results, take screenshots\n" \
         "external: perform nmap scans, manual finding verification, generate external report, take screenshots\n" \
         "internal: perform nmap scans, manual finding verification, generate internal report, take screenshots\n" \
-        "immuniweb: Download apk, static scan, generate report link\n" \
         "regen: Regenerates 'NMB_config.json'"
     )
 
@@ -295,23 +253,6 @@ def parse_arguments():
     parser.add_argument("--csv-file", required=False, help="Path to the csv file")
 
 
-
-    # WEB
-    parser.add_argument("-uf", "--burp-user-file", dest="burp_target_user_file", required=False, help="Username file of targetsite")
-    parser.add_argument("-pf", "--burp-pass-file", dest="burp_target_pass_file", required=False, help="Password file of targetsite")
-    parser.add_argument("-tf", "--targets", dest="burp_targets", required=False, help="burp web targets file")
-    parser.add_argument("-bu", "--burp-url", dest="burp_url", required=False, help="local burp API url")
-    parser.add_argument("--reattach", dest="burp_reattach", required=False, action="store_const", const=True, help="reattach to burp scan if script dies")
-    # MOBSF
-    parser.add_argument("-mu", "--mobsf-url", dest="mobsf_url", required=False, help="Url of your mobsf instance with the port (http://localhost:8000)")
-    parser.add_argument("-st", "--scan-type", dest="mobsf_scan_type", required=False, choices=["apk", "ipa"], help="Scan type <apk or ipa>")
-    parser.add_argument("-an", "--app-name", dest="mobsf_app_name", required=False, help="com name of the app for automatic download, or path to mobile app")
-    
-    # IMMUNIWEB
-    parser.add_argument("-is", "--immuni-scan-type", dest="immuni_scan_type", required=False, choices=["apk", "ipa"], help="Scan type <apk or ipa>")
-    parser.add_argument("-ia", "--immuni-app-name",  dest="immuni_app_name", required=False, help="com name of the app for automatic download, or path to mobile app")
-    parser.add_argument("--force", dest="force_no_api", required=False, action="store_const", const=True, help="run immuniweb without an API key (Up to two scans per day)")
-    
     # INTERNAL/EXTERNAL
     parser.add_argument("-d", "--drone", required=False, help="drone name or IP")
     parser.add_argument("-c", "--client-name", dest="client", required=False, help="client name or project name (used to name the scan and output files)")
@@ -320,8 +261,6 @@ def parse_arguments():
     parser.add_argument("-ex", "--external", dest="external", required=False, action="store_const", const=True, help="Enable external mode")
     parser.add_argument("-l", "--local", dest="local", required=False, action="store_const", const=True, help="run manual checks on your local machine instead of over ssh")
     parser.add_argument("--discovery", dest="discovery", required=False, action="store_const", const=True, help="Enable discovery scan prior to running nessus.")
-    parser.add_argument("--eyewitness", dest="run_eyewitness", required=False, action="store_const", const=True, help="Enable eyewitness mode for lackey")
-    parser.add_argument("--guess", dest="enable_guessing", required=False, action="store_const", const=True, help="Enable guess mode for lackey")
 
     args = parser.parse_args()
     return args

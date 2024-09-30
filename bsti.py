@@ -1,16 +1,21 @@
 # BSTI
-# version: 1.1
+# version: 1.2
 # Authors: Connor Fancy
 
+import csv
 import sys
 import os
 import pandas as pd
-from PyQt5.QtWidgets import (QApplication, QCompleter, QListWidget, QSplitter, QMenu, QInputDialog, QDialogButtonBox, QTableWidget, QTableWidgetItem, QCheckBox, QLabel, QAction, QTabBar, QStyle, QPlainTextEdit, QMainWindow, QGridLayout, QHBoxLayout, QTabWidget, QTextEdit, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QDialog, QLineEdit, QFormLayout, QMessageBox, QComboBox)
-from PyQt5.QtCore import QThread, pyqtSignal, QUrl, QRegExp, Qt, QProcess
-from PyQt5.QtGui import QTextCursor, QFont, QSyntaxHighlighter, QTextCharFormat, QColor, QDesktopServices
-from PyQt5.QtWebKitWidgets import QWebView
-from PyQt5.QtGui import QTextCharFormat, QColor
+from PyQt5.QtWidgets import (QApplication, QTreeView, QScrollArea, QToolBar, QVBoxLayout, QSlider, QFileSystemModel, QProgressBar, QStatusBar, QHeaderView, QGraphicsPixmapItem, QGroupBox, QCompleter, QListWidget, QSizePolicy, QSplitter, QMenu, QInputDialog, QDialogButtonBox, QTableWidget, QTableWidgetItem, QCheckBox, QLabel, QAction, QTabBar, QStyle, QPlainTextEdit, QMainWindow, QGridLayout, QHBoxLayout, QTabWidget, QTextEdit, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QDialog, QLineEdit, QFormLayout, QMessageBox, QComboBox)
+from PyQt5.QtCore import QThread, pyqtSignal, QTimer, QUrl, QRegExp, Qt, QProcess, QEvent, QPoint, QRectF, QSizeF
+from PyQt5.QtGui import QTextCursor, QFont, QSyntaxHighlighter, QTextCharFormat, QColor, QDesktopServices, QPainter, QStandardItemModel
+from PyQt5.QtGui import QTextCharFormat, QColor, QStandardItem, QPixmap, QTextDocument
+from PyQt5.QtWidgets import (QGraphicsView, QGraphicsScene, QGraphicsItem, QGraphicsLineItem, 
+                             QGraphicsTextItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsDropShadowEffect, QVBoxLayout, QWidget, QMenu, QAction, QInputDialog)
+from PyQt5.QtCore import Qt, QPoint, QPointF, QLineF
+from PyQt5.QtGui import QPen, QBrush, QColor, QLinearGradient, QImage
 import paramiko
+import requests
 from scp import SCPClient
 import tempfile
 import json
@@ -27,6 +32,14 @@ import shlex
 import autopep8
 import time
 import platform
+import py7zr
+import zipfile
+from io import StringIO
+
+from mobsf.mobsf import Mobber
+from mobsf.validator import XMLScreenshotTool
+
+
 warnings.filterwarnings("ignore", category=DeprecationWarning, 
                         message=".*sipPyTypeDict.*") # hushes annoying errors for now temp solution
 
@@ -860,8 +873,9 @@ class NMBRunnerThread(QThread):
             self.process.send_signal(signal.SIGINT)
 
 class N2PArgsDialog(QDialog):
-    def __init__(self, parent=None, default_client_id="", default_report_id=""):
+    def __init__(self, parent=None, default_client_id="", default_report_id="", client_overrides_dir="client_overrides"):
         super(N2PArgsDialog, self).__init__(parent)
+        self.client_overrides_dir = client_overrides_dir
         self.layout = QVBoxLayout(self)
         self.layout.setSpacing(10)
         self.layout.setContentsMargins(10, 10, 10, 10)
@@ -877,7 +891,7 @@ class N2PArgsDialog(QDialog):
         self.report_id_edit.setText(default_report_id)
 
         self.scope_edit = QComboBox(self)
-        self.scope_edit.addItems(["", "internal", "external", "web", "surveillance"])
+        self.scope_edit.addItems(["", "internal", "external", "web", "mobile", "surveillance"])
 
         # Directory field with Browse button
         self.directory_layout = QHBoxLayout()
@@ -894,6 +908,10 @@ class N2PArgsDialog(QDialog):
         self.screenshot_dir_browse_button.clicked.connect(self.browse_screenshot_directory)
         self.screenshot_dir_layout.addWidget(self.screenshot_dir_edit)
         self.screenshot_dir_layout.addWidget(self.screenshot_dir_browse_button)
+
+        # Add Client TOML Dropdown
+        self.toml_dropdown = QComboBox(self)
+        self.populate_toml_dropdown()
 
         self.target_plextrac_edit = QComboBox(self)
         self.target_plextrac_edit.addItems(["report"])
@@ -914,6 +932,8 @@ class N2PArgsDialog(QDialog):
         self.layout.addLayout(self.directory_layout)
         self.layout.addWidget(QLabel("Screenshot Directory"))
         self.layout.addLayout(self.screenshot_dir_layout)
+        self.layout.addWidget(QLabel("Client Override File"))
+        self.layout.addWidget(self.toml_dropdown)
         self.layout.addWidget(QLabel("Target Plextrac"))
         self.layout.addWidget(self.target_plextrac_edit)
         self.layout.addWidget(self.non_core_check)
@@ -971,9 +991,15 @@ class N2PArgsDialog(QDialog):
         if directory:
             self.screenshot_dir_edit.setText(directory)
 
+    def populate_toml_dropdown(self):
+        """Populate the dropdown with TOML files from client_overrides directory"""
+        if os.path.isdir(self.client_overrides_dir):
+            toml_files = [f for f in os.listdir(self.client_overrides_dir) if f.endswith('.toml')]
+            self.toml_dropdown.addItem("")  # Empty option for no file selected
+            self.toml_dropdown.addItems(toml_files)
 
     def get_arguments(self):
-        # Return the entered arguments
+        """Return the entered arguments."""
         return {
             'username': self.username_edit.text(),
             'password': self.password_edit.text(),
@@ -984,7 +1010,9 @@ class N2PArgsDialog(QDialog):
             'targettedplextrac': self.target_plextrac_edit.currentText(),
             'screenshot_dir': self.screenshot_dir_edit.text(),
             'noncore': self.non_core_check.isChecked(),
+            'client_config': os.path.join(self.client_overrides_dir, self.toml_dropdown.currentText()) if self.toml_dropdown.currentText() else None
         }
+
 
 class CredentialsDialog(QDialog):
     def __init__(self, parent=None):
@@ -1049,13 +1077,14 @@ class CustomTableWidget(QTableWidget):
 class ZeusWorker(QThread):
     output_signal = pyqtSignal(str)
 
-    def __init__(self, command_args):
+    def __init__(self, command_args, working_directory):
         super().__init__()
         self.command_args = command_args
+        self.working_directory = working_directory
 
     def run(self):
         try:
-            process = subprocess.Popen(self.command_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+            process = subprocess.Popen(self.command_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, cwd=self.working_directory)
             final_output = ''
             for line in process.stdout:
                 final_output += line
@@ -1065,6 +1094,1434 @@ class ZeusWorker(QThread):
         except Exception as e:
             final_output = f"Failed to run Zeus: {str(e)}"
             self.output_signal.emit(final_output)
+
+
+class MobSFConnectionCheckThread(QThread):
+    connection_status = pyqtSignal(bool)
+
+    def __init__(self, url):
+        super().__init__()
+        self.url = url
+
+    def run(self):
+        # Validate the MobSF URL in a separate thread
+        is_connected = self.validate_mobsf_url(self.url)
+        self.connection_status.emit(is_connected)
+
+    def validate_mobsf_url(self, url):
+        try:
+            response = requests.get(url, timeout=3)
+            if response.status_code == 200 and "MobSF" in response.text:
+                return True
+            return False
+        except requests.exceptions.RequestException:
+            return False
+
+
+
+class MobSFScanThread(QThread):
+    progress = pyqtSignal(str)  # Signal for updating progress
+    result_ready = pyqtSignal(list)  # Signal for sending results back to the main window
+
+    def __init__(self, mobsf_url, app_path):
+        super().__init__()
+        self.mobsf_url = mobsf_url
+        self.app_path = app_path
+
+    def run(self):
+        try:
+            self.progress.emit("Starting scan...")
+
+            # Initialize Mobber and run scan
+            mobber = Mobber(mobsf_url=self.mobsf_url, app_path=self.app_path)
+            self.progress.emit("Scan in progress...")
+
+            # Run the scan
+            scan_results = mobber.scan_file()
+            if scan_results:
+                self.progress.emit("Scan completed. Generating report...")
+                mobber.generate_report()
+                self.progress.emit("Report generated. Generating scorecard...")
+                mobber.generate_scorecard()
+                self.progress.emit("Scorecard generated.")
+
+                # Extract and emit findings
+                findings = mobber.parse_results()
+                self.result_ready.emit(findings)
+            else:
+                self.progress.emit("Scan failed.")
+        except Exception as e:
+            self.progress.emit(f"Error occurred: {str(e)}")
+          
+          
+
+class CommandNode(QGraphicsRectItem):
+    def __init__(self, title, command, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.title = title
+        self.command = command
+        self.setRect(0, 0, 150, 80)  # Adjusted size
+        self.setPen(QPen(QColor("#6272a4"), 2))
+        
+        # Gradient background
+        gradient = QLinearGradient(0, 0, 0, 80)
+        gradient.setColorAt(0, QColor("#44475a"))
+        gradient.setColorAt(1, QColor("#343746"))
+        self.setBrush(QBrush(gradient))
+        
+        # Add a shadow effect
+        self.setGraphicsEffect(QGraphicsDropShadowEffect(blurRadius=10, color=QColor(0, 0, 0, 150), offset=QPointF(3, 3)))
+        
+        # Text
+        self.text_item = QGraphicsTextItem(self.title, self)
+        font = QFont("Arial", 10, QFont.Bold)
+        self.text_item.setFont(font)
+        self.text_item.setDefaultTextColor(QColor("#f8f8f2"))
+        self.text_item.setPos(15, 25)  # Centered within the node
+
+        self.setAcceptHoverEvents(True)
+        self.setFlag(QGraphicsItem.ItemIsSelectable)  # Make the node selectable
+        self.setFlag(QGraphicsItem.ItemIsFocusable)  # Make the node focusable
+
+    def hoverEnterEvent(self, event):
+        tooltip = f"Command: {self.command}"
+        self.setToolTip(tooltip)
+        self.setBrush(QBrush(QColor("#6272a4")))  # Change color on hover
+        super().hoverEnterEvent(event)
+
+    def hoverLeaveEvent(self, event):
+        gradient = QLinearGradient(0, 0, 0, 80)
+        gradient.setColorAt(0, QColor("#44475a"))
+        gradient.setColorAt(1, QColor("#343746"))
+        self.setBrush(QBrush(gradient))  # Restore original color
+        super().hoverLeaveEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        # Trigger command editing on double-click
+        editor = QInputDialog()
+        new_command, ok = editor.getText(None, 'Edit Command', 'Enter the new command:', QLineEdit.Normal, self.command)
+        if ok:
+            self.command = new_command
+            # Update the text item to reflect the change
+            self.text_item.setPlainText(self.title + "\n" + new_command)
+        super().mouseDoubleClickEvent(event)
+
+
+class WorkflowEditor(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setStyleSheet("background-color: #282a36; color: #f8f8f2;")
+        self.layout = QVBoxLayout(self)
+
+        self.graphics_view = QGraphicsView()
+        self.graphics_view.setStyleSheet("background-color: #44475a; border: 1px solid #6272a4;")
+        self.scene = QGraphicsScene(self)
+        self.graphics_view.setScene(self.scene)
+        self.layout.addWidget(self.graphics_view)
+
+        self.graphics_view.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.graphics_view.customContextMenuRequested.connect(self.show_context_menu)
+
+        self.nodes = []  # To keep track of nodes in the correct order
+
+    def add_command(self, title, command):
+        node = CommandNode(title, command)
+        node.setFlag(QGraphicsItem.ItemIsSelectable)  # Ensure node is selectable
+        self.scene.addItem(node)
+        self.nodes.append(node)
+        self.update_node_positions()
+
+    def show_context_menu(self, position: QPoint):
+        menu = QMenu()
+        
+        add_action = QAction("Add Command", self)
+        add_action.triggered.connect(self.add_command_dialog)
+        menu.addAction(add_action)
+
+        # Determine if we clicked on a node
+        item = self.scene.itemAt(self.graphics_view.mapToScene(position), self.graphics_view.transform())
+        
+        if isinstance(item, CommandNode):
+            # Right-clicked on a node
+            move_up_action = QAction("Move Up", self)
+            move_up_action.triggered.connect(lambda: self.move_node(item, -1))
+            menu.addAction(move_up_action)
+            
+            move_down_action = QAction("Move Down", self)
+            move_down_action.triggered.connect(lambda: self.move_node(item, 1))
+            menu.addAction(move_down_action)
+
+            delete_action = QAction("Delete Node", self)
+            delete_action.triggered.connect(lambda: self.delete_node(item))
+            menu.addAction(delete_action)
+
+        menu.exec_(self.graphics_view.viewport().mapToGlobal(position))
+
+    def add_command_dialog(self):
+        title, ok = QInputDialog.getText(self, 'Add Command', 'Enter command title:')
+        if ok and title:
+            command, ok = QInputDialog.getText(self, 'Add Command', 'Enter the command:')
+            if ok and command:
+                self.add_command(title, command)
+
+    def save_workflow(self):
+        workflow_data = []
+        for item in self.nodes:  # Use self.nodes to get order
+            workflow_data.append({"title": item.title, "command": item.command})
+        return {"commands": workflow_data}
+
+    def load_workflow_from_file(self, workflow_data):
+        self.scene.clear()  # Clear current nodes
+        self.nodes = []
+        for command in workflow_data.get('commands', []):
+            self.add_command(command["title"], command["command"])  # Add in the order from JSON
+
+    def move_node(self, node, direction):
+        index = self.nodes.index(node)
+        new_index = index + direction
+        if 0 <= new_index < len(self.nodes):
+            # Swap nodes in the list
+            self.nodes[index], self.nodes[new_index] = self.nodes[new_index], self.nodes[index]
+            # Reposition nodes based on the updated list
+            self.update_node_positions()
+
+    def update_node_positions(self):
+        # Reposition nodes according to their order in self.nodes list
+        for i, node in enumerate(self.nodes):
+            node.setPos(50, 100 * i)  # Adjust positioning as needed
+
+    def delete_node(self, node):
+        self.scene.removeItem(node)
+        self.nodes.remove(node)
+        self.update_node_positions()
+
+
+  
+class CommandThread(QThread):
+    output_signal = pyqtSignal(str)
+    error_signal = pyqtSignal(str)
+
+    def __init__(self, commands, log_file):
+        super().__init__()
+        self.commands = commands
+        self.log_file = log_file
+
+    def run(self):
+        try:
+            # Open the log file in append mode
+            with open(self.log_file, 'a') as log_file:
+                for command in self.commands:
+                    # Log the command being executed
+                    log_file.write(f"Executing: {command}\n")
+                    # Run the command
+                    process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    stdout, stderr = process.communicate()
+
+                    # Decode output
+                    stdout_text = stdout.decode()
+                    stderr_text = stderr.decode()
+
+                    # Write stdout and stderr to the log file
+                    if stdout_text:
+                        log_file.write(stdout_text)
+                    if stderr_text:
+                        log_file.write(stderr_text)
+
+                    # Emit signals to update the GUI
+                    if stdout_text:
+                        self.output_signal.emit(stdout_text)
+                    if stderr_text:
+                        self.error_signal.emit(stderr_text)
+                    
+        except Exception as e:
+            self.error_signal.emit(f"Exception: {e}")
+
+
+
+
+class DownloadThread(QThread):
+    progress = pyqtSignal(int)
+    finished = pyqtSignal(str)
+    
+    def __init__(self, url, download_path, parent=None):
+        super().__init__(parent)
+        self.url = url
+        self.download_path = download_path
+
+    def run(self):
+        try:
+            response = requests.get(self.url, stream=True)
+            total_size = int(response.headers.get('content-length', 0))
+            downloaded_size = 0
+
+            # Define tools directory in current working directory
+            tools_dir = os.path.join(os.getcwd(), 'tools')
+            os.makedirs(tools_dir, exist_ok=True)
+            self.download_path = os.path.join(tools_dir, os.path.basename(self.download_path))
+
+            with open(self.download_path, 'wb') as file:
+                for chunk in response.iter_content(chunk_size=1024):
+                    if chunk:
+                        file.write(chunk)
+                        downloaded_size += len(chunk)
+                        progress = int(downloaded_size / total_size * 100)
+                        self.progress.emit(progress)
+            
+            # Handle different file types
+            if self.download_path.endswith('.zip'):
+                self.extract_zip(self.download_path)
+            elif self.download_path.endswith('.7z'):
+                self.extract_7z(self.download_path)
+            else:
+                # Make the binary executable if it's not an archive
+                self.make_executable(self.download_path)
+                
+            self.finished.emit("Download completed successfully!")
+        except Exception as e:
+            self.finished.emit(f"Error: {str(e)}")
+
+    def extract_zip(self, file_path):
+        try:
+            # Extract to a directory named after the file base name, with special handling for 'jadx.zip'
+            if file_path.endswith('jadx-1.5.0.zip'):
+                extract_dir = os.path.join(os.path.dirname(file_path), 'jadx')
+            else:
+                extract_dir = os.path.join(os.path.dirname(file_path), os.path.basename(file_path).replace('.zip', ''))
+            
+            os.makedirs(extract_dir, exist_ok=True)
+            
+            with zipfile.ZipFile(file_path, 'r') as zip_ref:
+                zip_ref.extractall(extract_dir)
+
+            if platform.system() != 'Windows':
+                for root, dirs, files in os.walk(extract_dir):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        self.make_executable(file_path)
+
+            # Delete the zip file after extraction
+            os.remove(self.download_path)
+        except Exception as e:
+            self.finished.emit(f"Extraction Error: {str(e)}")
+
+    def extract_7z(self, file_path):
+        try:
+            # Extract to a directory named after the file base name
+            extract_dir = os.path.join(os.path.dirname(file_path), os.path.basename(file_path).replace('.7z', ''))
+            os.makedirs(extract_dir, exist_ok=True)
+            
+            with py7zr.SevenZipFile(file_path, mode='r') as archive:
+                archive.extractall(path=extract_dir)
+
+            if platform.system() != 'Windows':
+                for root, dirs, files in os.walk(extract_dir):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        self.make_executable(file_path)
+
+            # Delete the 7z file after extraction
+            os.remove(self.download_path)
+        except Exception as e:
+            self.finished.emit(f"Extraction Error: {str(e)}")
+
+    def make_executable(self, file_path):
+        if platform.system() != 'Windows':
+            os.chmod(file_path, 0o755)
+
+
+class BinaryDownloadWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.initUI()
+
+    def initUI(self):
+        self.layout = QVBoxLayout()
+
+        # Title label
+        self.info_label = QLabel("Download Addons")
+        self.info_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #50fa7b;")
+        self.layout.addWidget(self.info_label)
+
+        # Platform selection
+        self.platform_combo = QComboBox()
+        self.platform_combo.addItems(["Select Platform", "Windows", "Linux"])
+        self.layout.addWidget(self.platform_combo)
+
+        # Form layout for addon download buttons
+        self.form_layout = QFormLayout()
+        self.layout.addLayout(self.form_layout)
+
+        # Add buttons for each addon
+        self.addon1_button = QPushButton("Download Zeus")
+        self.addon2_button = QPushButton("Download apk-mitmv2")
+        self.download_apktool_button = QPushButton("Download apktool")
+        self.download_jadx_button = QPushButton("Download Jadx")
+        self.download_drozer_button = QPushButton("Download Drozer-agent APK")
+        self.download_nuclei_button = QPushButton("Download nuclei")
+
+        self.form_layout.addRow(self.addon1_button)
+        self.form_layout.addRow(self.addon2_button)
+        self.form_layout.addRow(self.download_apktool_button)
+        self.form_layout.addRow(self.download_jadx_button)
+        self.form_layout.addRow(self.download_drozer_button)
+        self.form_layout.addRow(self.download_nuclei_button)
+
+        # Create a progress bar and label to show download progress
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #44475a;
+                border-radius: 5px;
+                background: #282a36;
+            }
+            QProgressBar::chunk {
+                background: #bd93f9;
+                width: 20px;
+            }
+        """)
+        self.layout.addWidget(self.progress_bar)
+        
+        self.status_label = QLabel("")
+        self.status_label.setStyleSheet("font-size: 14px; color: #ff5555;")
+        self.layout.addWidget(self.status_label)
+
+        self.setLayout(self.layout)
+
+        # Connect buttons to download methods
+        self.addon1_button.clicked.connect(self.download_addon1)
+        self.addon2_button.clicked.connect(self.download_addon2)
+        self.download_apktool_button.clicked.connect(self.download_apktool)
+        self.download_jadx_button.clicked.connect(self.download_jadx)
+        self.download_drozer_button.clicked.connect(self.download_drozer)
+        self.download_nuclei_button.clicked.connect(self.download_nuclei)
+
+    def get_platform_url(self, base_url):
+        platform = self.platform_combo.currentText()
+        if platform == "Windows":
+            return base_url.replace("linux", "windows")
+        elif platform == "Linux":
+            return base_url
+        else:
+            self.status_label.setText("Please select a valid platform.")
+            return None
+
+    def download_addon1(self):
+        url = self.get_platform_url('https://github.com/fancyc-bsi/ZEUS/releases/download/v0.1.0/zeus_linux_x64.7z')
+        if url:
+            self.start_download(url, 'zeus.7z')
+
+    def download_addon2(self):
+        url = self.get_platform_url('https://github.com/mavedirra-01/apk-mitmv2/releases/download/v1.0.0/apk-mitm-linux')
+        if url:
+            download_path = 'apk-mitm-windows.exe' if self.platform_combo.currentText() == "Windows" else 'apk-mitm-linux'
+            self.start_download(url, download_path)
+            
+    def download_apktool(self):
+        url = self.get_platform_url('https://bitbucket.org/iBotPeaches/apktool/downloads/apktool_2.9.3.jar')
+        if url:
+            self.start_download(url, 'apktool.jar')
+
+    def download_jadx(self):
+        url = 'https://github.com/skylot/jadx/releases/download/v1.5.0/jadx-1.5.0.zip'
+        self.start_download(url, 'jadx-1.5.0.zip')
+
+    def download_drozer(self):
+        url = 'https://github.com/WithSecureLabs/drozer-agent/releases/download/3.1.0/drozer-agent.apk'
+        self.start_download(url, 'drozer-agent.apk')
+
+    def download_nuclei(self):
+        base_url = 'https://github.com/projectdiscovery/nuclei/releases/download/v3.3.2/'
+        
+        if self.platform_combo.currentText() == "Windows":
+            zip_file = 'nuclei_3.3.2_windows_amd64.zip'
+        elif self.platform_combo.currentText() == "Linux":
+            zip_file = 'nuclei_3.3.2_linux_amd64.zip'
+        
+        full_url = base_url + zip_file
+        
+        self.start_download(full_url, zip_file)
+
+
+    def start_download(self, url, download_path):
+        if not url:
+            return
+        
+        self.download_thread = DownloadThread(url, download_path)
+        self.download_thread.progress.connect(self.update_progress)
+        self.download_thread.finished.connect(self.download_finished)
+        self.download_thread.start()
+
+    def update_progress(self, value):
+        self.progress_bar.setValue(value)
+
+    def download_finished(self, message):
+        self.status_label.setText(message)
+
+        
+        
+### Currently not being used - idk if i'll get around to doing it 
+class ScreenshotEditorTab(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.layout = QVBoxLayout(self)
+        
+        # Button to select the directory
+        self.select_dir_button = QPushButton("Select Screenshot Directory")
+        self.select_dir_button.clicked.connect(self.select_directory)
+        self.layout.addWidget(self.select_dir_button)
+
+        # QGraphicsView and Scene
+        self.view = QGraphicsView()
+        self.scene = QGraphicsScene()
+        self.view.setScene(self.scene)
+        self.layout.addWidget(self.view)
+        
+        # Navigation Buttons
+        self.navigation_layout = QHBoxLayout()
+        self.prev_button = QPushButton("Previous")
+        self.prev_button.clicked.connect(self.show_prev_image)
+        self.navigation_layout.addWidget(self.prev_button)
+        
+        self.next_button = QPushButton("Next")
+        self.next_button.clicked.connect(self.show_next_image)
+        self.navigation_layout.addWidget(self.next_button)
+        
+        self.layout.addLayout(self.navigation_layout)
+        
+        # Crop, Finalize, Draw Mode, and Save Buttons
+        self.crop_button = QPushButton("Enter Crop Mode")
+        self.crop_button.clicked.connect(self.toggle_crop_mode)
+        self.layout.addWidget(self.crop_button)
+        
+        self.finalize_button = QPushButton("Finalize Crop")
+        self.finalize_button.clicked.connect(self.finalize_crop)
+        self.finalize_button.setDisabled(True)
+        self.layout.addWidget(self.finalize_button)
+        
+        self.draw_mode_button = QPushButton("Enter Draw Mode")
+        self.draw_mode_button.clicked.connect(self.toggle_draw_mode)
+        self.layout.addWidget(self.draw_mode_button)
+        
+        self.save_button = QPushButton("Save Image")
+        self.save_button.clicked.connect(self.save_image)
+        self.layout.addWidget(self.save_button)
+        
+        # Rectangle Tool Slider
+        self.rect_size_slider = QSlider(Qt.Horizontal)
+        self.rect_size_slider.setMinimum(1)
+        self.rect_size_slider.setMaximum(10)
+        self.rect_size_slider.setValue(2)
+        self.rect_size_slider.setTickPosition(QSlider.TicksBelow)
+        self.rect_size_slider.setTickInterval(1)
+        self.rect_size_slider.setToolTip("Rectangle Border Width")
+        self.rect_size_slider.valueChanged.connect(self.update_rect_border_width)
+        
+        self.layout.addWidget(QLabel("Rectangle Border Width:"))
+        self.layout.addWidget(self.rect_size_slider)
+        
+        # Initialize variables
+        self.current_pixmap_item = None
+        self.start_pos = None
+        self.rect_item = None
+        self.selected_item = None
+        self.image_files = []
+        self.current_index = 0
+        self.crop_mode = False
+        self.draw_mode = False
+        self.moving_mode = False
+        
+        self.view.setRenderHint(QPainter.Antialiasing)
+        self.view.setRenderHint(QPainter.SmoothPixmapTransform)
+        
+        # Connect mouse events for drawing and moving rectangles
+        self.view.mousePressEvent = self.mouse_press_event
+        self.view.mouseMoveEvent = self.mouse_move_event
+        self.view.mouseReleaseEvent = self.mouse_release_event
+
+    def select_directory(self):
+        directory = QFileDialog.getExistingDirectory(self, "Select Screenshot Directory")
+        if directory:
+            self.image_files = [os.path.join(directory, f) for f in os.listdir(directory)
+                                if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+            if self.image_files:
+                self.current_index = 0
+                self.load_image(self.image_files[self.current_index])
+
+    def load_image(self, file_path):
+        pixmap = QPixmap(file_path)
+        self.display_image(pixmap)
+        
+    def display_image(self, pixmap):
+        self.scene.clear()
+        self.current_pixmap_item = QGraphicsPixmapItem(pixmap)
+        self.scene.addItem(self.current_pixmap_item)
+        
+    def show_prev_image(self):
+        if self.image_files:
+            self.current_index = (self.current_index - 1) % len(self.image_files)
+            self.load_image(self.image_files[self.current_index])
+
+    def show_next_image(self):
+        if self.image_files:
+            self.current_index = (self.current_index + 1) % len(self.image_files)
+            self.load_image(self.image_files[self.current_index])
+    
+    def mouse_press_event(self, event):
+        if event.button() == Qt.LeftButton:
+            pos = self.view.mapToScene(event.pos())
+            if self.draw_mode or self.crop_mode:
+                self.start_pos = pos
+                self.rect_item = QGraphicsRectItem(QRectF())
+                self.rect_item.setPen(QPen(Qt.red if self.draw_mode else Qt.blue, self.rect_size_slider.value()))  # Drawing or crop mode color
+                self.scene.addItem(self.rect_item)
+            elif self.moving_mode:
+                self.selected_item = self.item_at_pos(pos)
+                if self.selected_item:
+                    self.start_pos = pos
+                    self.selected_item.setZValue(1)  # Bring the item to the front
+
+    def mouse_move_event(self, event):
+        if self.start_pos:
+            pos = self.view.mapToScene(event.pos())
+            if self.rect_item:
+                rect = QRectF(self.start_pos, pos).normalized()
+                self.rect_item.setRect(rect)
+            elif self.moving_mode and self.selected_item:
+                if isinstance(self.selected_item, QGraphicsRectItem):
+                    self.selected_item.setPos(self.selected_item.pos() + pos - self.start_pos)
+                    self.start_pos = pos
+
+    def mouse_release_event(self, event):
+        if self.start_pos:
+            pos = self.view.mapToScene(event.pos())
+            if self.crop_mode and self.rect_item:
+                rect = QRectF(self.start_pos, pos).normalized()
+                self.rect_item.setRect(rect)
+            self.start_pos = None
+            if not self.crop_mode:  # Only reset rect_item if not in crop mode
+                self.rect_item = None
+            self.selected_item = None
+
+    
+    def toggle_crop_mode(self):
+        self.crop_mode = not self.crop_mode
+        self.draw_mode = False
+        self.moving_mode = False
+        if self.crop_mode:
+            self.crop_button.setText("Exit Crop Mode")
+            self.finalize_button.setEnabled(True)
+            self.draw_mode_button.setEnabled(False)
+        else:
+            self.crop_button.setText("Enter Crop Mode")
+            self.finalize_button.setDisabled(True)
+            self.draw_mode_button.setEnabled(True)
+            self.rect_item = None  # Reset only if exiting crop mode
+        self.view.setCursor(Qt.CrossCursor if self.crop_mode else Qt.ArrowCursor)
+
+
+
+    
+    def finalize_crop(self):
+        try:
+
+            if self.crop_mode and self.rect_item:
+                rect = self.rect_item.rect().toRect()
+
+
+                if not rect.isEmpty():
+                    # Get pixmap
+                    pixmap = self.current_pixmap_item.pixmap()
+                    pixmap_rect = pixmap.rect()
+
+                    if not rect.intersects(pixmap_rect):
+                        return
+
+                    # Ensure the rectangle is within pixmap bounds
+                    rect = rect.intersected(pixmap_rect)
+                    cropped_pixmap = pixmap.copy(rect)
+
+                    # Remove old pixmap item
+                    self.scene.removeItem(self.current_pixmap_item)
+
+                    # Add new pixmap item
+                    self.current_pixmap_item = QGraphicsPixmapItem(cropped_pixmap)
+                    self.scene.addItem(self.current_pixmap_item)
+
+                    # Update scene rect to fit new image size
+                    self.view.setSceneRect(self.current_pixmap_item.pixmap().rect())
+
+                # Reset rectangle item
+                self.rect_item = None
+                self.toggle_crop_mode()
+        except Exception as e:
+            print(f"Error in finalize_crop: {e}")
+
+
+
+    def toggle_draw_mode(self):
+        self.draw_mode = not self.draw_mode
+        self.crop_mode = False
+        self.moving_mode = False
+        if self.draw_mode:
+            self.draw_mode_button.setText("Exit Draw Mode")
+        else:
+            self.draw_mode_button.setText("Enter Draw Mode")
+        self.view.setCursor(Qt.CrossCursor if self.draw_mode else Qt.ArrowCursor)
+
+    def update_rect_border_width(self):
+        if self.rect_item:
+            self.rect_item.setPen(QPen(Qt.red if self.draw_mode else Qt.blue, self.rect_size_slider.value()))
+    
+    def save_image(self):
+        if self.current_pixmap_item:
+            file_path, _ = QFileDialog.getSaveFileName(self, "Save Image", "", "PNG Files (*.png);;JPEG Files (*.jpg *.jpeg)")
+            if file_path:
+                pixmap = self.current_pixmap_item.pixmap().copy()
+                painter = QPainter(pixmap)
+                pen_color = Qt.red if self.draw_mode else Qt.blue
+                for item in self.scene.items():
+                    if isinstance(item, QGraphicsRectItem):
+                        pen = QPen(pen_color, self.rect_size_slider.value())
+                        painter.setPen(pen)
+                        painter.drawRect(item.rect())
+                painter.end()
+                pixmap.save(file_path)
+
+    def item_at_pos(self, pos):
+        # Find and return the item under the given position
+        items = self.scene.items(pos)
+        for item in items:
+            if isinstance(item, QGraphicsRectItem):
+                return item
+        return None
+    
+    
+
+class XmlHighlighter(QSyntaxHighlighter):
+    def __init__(self, document):
+        super(XmlHighlighter, self).__init__(document)
+        
+        # Dracula theme colors
+        self.xml_tag_format = QTextCharFormat()
+        self.xml_tag_format.setForeground(QColor("#ff79c6"))  # Pinkish color for tags
+
+        self.xml_attribute_format = QTextCharFormat()
+        self.xml_attribute_format.setForeground(QColor("#8be9fd"))  # Cyan for attributes
+
+        self.xml_value_format = QTextCharFormat()
+        self.xml_value_format.setForeground(QColor("#f1fa8c"))  # Yellow for values
+
+        self.xml_comment_format = QTextCharFormat()
+        self.xml_comment_format.setForeground(QColor("#6272a4"))  # Purple-gray for comments
+        self.xml_comment_format.setFontItalic(True)
+
+        # Regex patterns
+        self.tag_pattern = re.compile(r'<\/?\w+')
+        self.attribute_pattern = re.compile(r'\s+\w+\s*=')
+        self.value_pattern = re.compile(r'\"[^\"]*\"')
+        self.comment_pattern = re.compile(r'<!--[^-]*-->')
+
+    def highlightBlock(self, text):
+        for pattern, _format in [(self.tag_pattern, self.xml_tag_format),
+                                 (self.attribute_pattern, self.xml_attribute_format),
+                                 (self.value_pattern, self.xml_value_format),
+                                 (self.comment_pattern, self.xml_comment_format)]:
+            for match in pattern.finditer(text):
+                start, end = match.span()
+                self.setFormat(start, end - start, _format)
+
+
+class ValidatorRunner(QThread):
+    output_received = pyqtSignal(str)
+    finished = pyqtSignal()
+    error_occurred = pyqtSignal(str)
+
+    def __init__(self, xml_file, output_dir, parent=None):
+        super().__init__(parent)
+        self.xml_file = xml_file
+        self.output_dir = output_dir
+
+    def run(self):
+        # Capture stdout
+        old_stdout = sys.stdout
+        new_stdout = StringIO()
+        sys.stdout = new_stdout
+
+        try:
+            # Instantiate and run the engine method of XMLScreenshotTool
+            tool = XMLScreenshotTool(self.xml_file, 'validator.json', self.output_dir)
+            tool.process_screenshots()
+
+            # Emit the output line by line
+            new_stdout.seek(0)
+            for line in new_stdout:
+                if line.strip():  # Emit only non-empty lines
+                    self.output_received.emit(line.strip())
+
+            # Emit a final message to indicate completion
+            self.finished.emit()
+        except Exception as e:
+            # Restore original stdout in case of an exception
+            sys.stdout = old_stdout
+            # Emit error message
+            self.error_occurred.emit(str(e))
+        finally:
+            # Restore original stdout
+            sys.stdout = old_stdout
+
+
+
+class APKLeaksThread(QThread):
+    result_signal = pyqtSignal(str)
+
+    def __init__(self, apk_file, parent=None):
+        super().__init__(parent)
+        self.apk_file = apk_file
+        self.args = None
+
+    def run(self):
+        from apkleaks.cli import run_apkleaks
+
+        output_file = None 
+        pattern_file = None
+        json_output = True
+
+        try:
+            output_file_path = run_apkleaks(
+                self.apk_file,
+                output=output_file,
+                pattern=pattern_file,
+                args=self.args,
+                json_output=json_output
+            )
+            
+            # Read the results from the output file
+            if output_file_path and os.path.exists(output_file_path):
+                with open(output_file_path, 'r') as file:
+                    results = file.read()
+            else:
+                results = "No results available or output file not found."
+            
+        except Exception as e:
+            results = f"An error occurred: {str(e)}"
+        
+        self.result_signal.emit(results)
+
+
+class ExplorerSubTab(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.layout = QVBoxLayout(self)
+
+        # File selection button
+        self.select_apk_button = QPushButton("Select APK")
+        self.select_apk_button.clicked.connect(self.select_apk)
+        self.style_button(self.select_apk_button)
+        self.layout.addWidget(self.select_apk_button)
+
+        # Decompile button
+        self.decompile_button = QPushButton("Decompile APK")
+        self.decompile_button.clicked.connect(self.decompile_selected_apk)
+        self.decompile_button.setEnabled(False)
+        self.style_button(self.decompile_button)
+        self.layout.addWidget(self.decompile_button)
+
+        # File tree view
+        self.tree_view = QTreeView()
+        self.style_tree_view(self.tree_view)
+        self.layout.addWidget(self.tree_view)
+        self.layout.setStretch(2, 1)  # Full stretch for the tree view
+        self.tree_view.header().setSectionResizeMode(QHeaderView.Stretch)
+
+        # QFileSystemModel for directory structure
+        self.file_system_model = QFileSystemModel()
+        self.file_system_model.setReadOnly(False)
+        self.tree_view.setModel(self.file_system_model)
+        self.tree_view.doubleClicked.connect(self.open_file_editor)
+
+        # Thread setup for decompiling APK
+        self.decompile_thread = None
+        self.selected_apk_path = None
+
+        # Status label
+        self.status_label = QLabel("Status: Ready")
+        self.style_status_label(self.status_label)
+        self.layout.addWidget(self.status_label)
+
+    def style_button(self, button):
+        button.setCursor(Qt.PointingHandCursor)
+        button.setStyleSheet("""
+            QPushButton {
+                background-color: #6272a4;
+                color: #f8f8f2;
+                border-radius: 5px;
+                padding: 5px 10px;
+                font-weight: bold;
+            }
+            QPushButton:disabled {
+                background-color: #44475a;
+                color: #8b8b8b;
+            }
+            QPushButton:hover {
+                background-color: #7b82c4;
+            }
+            QPushButton:pressed {
+                background-color: #52588e;
+            }
+        """)
+
+    def style_tree_view(self, tree_view):
+        tree_view.setStyleSheet("""
+            QTreeView {
+                background-color: #282a36;
+                color: #f8f8f2;
+                font-family: 'Courier New';
+                font-size: 12pt;
+                border: 1px solid #44475a;
+            }
+            QTreeView::item:hover {
+                background-color: #44475a;
+            }
+            QTreeView::item:selected {
+                background-color: #6272a4;
+            }
+        """)
+
+    def style_status_label(self, label):
+        label.setStyleSheet("""
+            QLabel {
+                font-size: 14pt;
+                font-weight: bold;
+                color: #f8f8f2;
+                padding: 5px;
+                background-color: #44475a;
+                border-radius: 5px;
+            }
+        """)
+
+    def update_status(self, message, color="#44475a"):
+        self.status_label.setText(message)
+        self.status_label.setStyleSheet(f"""
+            QLabel {{
+                font-size: 14pt;
+                font-weight: bold;
+                color: #f8f8f2;
+                padding: 5px;
+                background-color: {color};
+                border-radius: 5px;
+            }}
+        """)
+
+    def select_apk(self):
+        apk_path, _ = QFileDialog.getOpenFileName(self, "Select APK File", "", "APK Files (*.apk)")
+        if apk_path:
+            self.selected_apk_path = apk_path
+            self.decompile_button.setEnabled(True)
+            self.select_apk_button.setText(f"Selected: {os.path.basename(apk_path)}")
+            self.update_status(f"Status: {os.path.basename(apk_path)} selected", "#5e8b7e")  # green
+
+    def decompile_selected_apk(self):
+        if self.selected_apk_path:
+            self.update_status("Status: Decompiling...", "#ffb86c")  # orange
+            apk_name = os.path.splitext(os.path.basename(self.selected_apk_path))[0]
+            output_dir = os.path.join("decompiled", apk_name)
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+            self.start_decompile(self.selected_apk_path, output_dir)
+            self.decompile_button.setText("Decompiling...")
+
+
+    def on_decompilation_complete(self, output_dir):
+        self.display_decompiled_files(output_dir)
+        self.decompile_button.setEnabled(True)
+        self.decompile_button.setText("Decompile APK")
+        self.update_status("Status: Decompilation Complete", "#50fa7b")  # green
+
+    def display_decompiled_files(self, output_dir):
+        # Set the root path to the output directory
+        if os.path.exists(output_dir):
+            self.file_system_model.setRootPath(output_dir)
+            self.tree_view.setRootIndex(self.file_system_model.index(output_dir))
+            self.status_label.setText("Status: Showing Decompiled Code")
+        else:
+            self.update_status("Status: Decompiled code not found", "#ff5555")  # red
+
+
+    def start_decompile(self, apk_path, output_dir):
+        # Detect the OS
+        if platform.system() == "Windows":
+            # Path to apktool and jadx for Windows
+            apktool_path = os.path.join('tools', 'apktool.jar')
+            jadx_path = os.path.join('tools', 'jadx', 'bin', 'jadx.bat')
+        else:
+            # Path to apktool and jadx for Linux/Mac
+            apktool_path = os.path.join('tools', 'apktool.jar')
+            jadx_path = os.path.join('tools', 'jadx', 'bin', 'jadx')
+
+        # Check if apktool exists
+        if not os.path.isfile(apktool_path):
+            QMessageBox.warning(
+                self,
+                "Missing APKTool",
+                "The file 'apktool.jar' is missing. Please use the 'addons' option in the top bar to download it.",
+                QMessageBox.Ok
+            )
+            return
+
+        # Check if jadx exists
+        if not os.path.isfile(jadx_path):
+            QMessageBox.warning(
+                self,
+                "Missing Jadx",
+                "The Jadx binary is missing. Please use the 'addons' option in the top bar to download it.",
+                QMessageBox.Ok
+            )
+            return
+
+        # Start the decompilation process
+        self.decompile_button.setEnabled(False)
+        self.decompile_thread = DecompileThread(apk_path, output_dir, apktool_path, jadx_path)
+        self.decompile_thread.decompiled.connect(self.on_decompilation_complete)
+        self.decompile_thread.start()
+
+    def open_file_editor(self, index):
+        file_path = self.file_system_model.filePath(index)
+        if os.path.isfile(file_path):
+            editor = FileEditorDialog(file_path)
+            editor.exec_()
+
+
+
+class DecompileThread(QThread):
+    decompiled = pyqtSignal(str)
+
+    def __init__(self, apk_path, output_dir, apktool_path, jadx_path):
+        super().__init__()
+        self.apk_path = apk_path
+        self.output_dir = output_dir
+        self.apktool_path = apktool_path
+        self.jadx_path = jadx_path
+
+    def run(self):
+        # Decompile Smali using apktool
+        smali_output_dir = os.path.join(self.output_dir, 'apktool')
+        os.makedirs(smali_output_dir, exist_ok=True)
+        subprocess.run(
+            ['java', '-jar', self.apktool_path, 'd', self.apk_path, '-o', smali_output_dir, '-f'],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+
+        # Decompile Java using jadx
+        java_output_dir = os.path.join(self.output_dir, 'jadx')
+        os.makedirs(java_output_dir, exist_ok=True)
+        subprocess.run(
+            [self.jadx_path, '-d', java_output_dir, self.apk_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+
+        self.decompiled.emit(self.output_dir)
+
+
+
+class FileEditorDialog(QDialog):
+    def __init__(self, file_path):
+        super().__init__()
+        self.file_path = file_path
+        self.setWindowTitle(f"Editing: {os.path.basename(file_path)}")
+        self.resize(1200, 800)  # Set default size for the editor
+
+        # Setup the text editor
+        self.text_edit = QTextEdit(self)
+        with open(file_path, 'r') as file:
+            self.text_edit.setText(file.read())
+
+        # Setup the save button
+        save_button = QPushButton("Save", self)
+        save_button.clicked.connect(self.save_changes)
+
+        # Setup the dialog layout
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.text_edit)
+        layout.addWidget(save_button)
+
+    def save_changes(self):
+        # Save the changes to the file
+        with open(self.file_path, 'w') as file:
+            file.write(self.text_edit.toPlainText())
+        self.accept()
+
+
+
+class DrozerThread(QThread):
+    output_signal = pyqtSignal(str)
+
+    def __init__(self, command):
+        super().__init__()
+        self.command = command
+
+    def run(self):
+        """Execute the Drozer command in a separate thread."""
+        try:
+            process = subprocess.Popen(self.command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout, stderr = process.communicate()
+
+            # Combine stdout and stderr and decode to strings
+            output = stdout.decode() + stderr.decode()
+
+            # Convert ANSI escape codes to HTML
+            formatted_output = self.ansi_to_html(output)
+
+            # Emit the formatted output
+            self.output_signal.emit(formatted_output)
+        except Exception as e:
+            self.output_signal.emit(f"Error: {str(e)}")
+
+    def ansi_to_html(self, text):
+        """Converts ANSI color codes to HTML span tags for QTextEdit display."""
+        ansi_to_html_map = {
+            '\033[91m': '<span style="color:#ff5555;">',  # Red
+            '\033[92m': '<span style="color:#50fa7b;">',  # Green
+            '\033[93m': '<span style="color:#f1fa8c;">',  # Yellow
+            '\033[94m': '<span style="color:#6272a4;">',  # Blue
+            '\033[95m': '<span style="color:#bd93f9;">',  # Magenta
+            '\033[0m': '</span>'  # Reset
+        }
+
+        for ansi, html in ansi_to_html_map.items():
+            text = text.replace(ansi, html)
+
+        # Replace newline with <br> for HTML display
+        text = text.replace('\n', '<br>')
+        return f"<pre>{text}</pre>"  # Use <pre> to preserve spacing
+
+
+
+
+
+class ConnectionHeartbeat(QThread):
+    status_signal = pyqtSignal(bool)
+
+    def __init__(self, check_function):
+        super().__init__()
+        self.check_function = check_function
+        self.running = True
+
+    def run(self):
+        """Periodically check the connection status."""
+        while self.running:
+            connected = self.check_function()
+            self.status_signal.emit(connected)
+            QThread.sleep(5)  # Check every 5 seconds
+
+    def stop(self):
+        """Stop the heartbeat check."""
+        self.running = False
+
+
+class DrozerTab:
+    def __init__(self, parent):
+        self.parent = parent
+        self.package = ""
+        self.drozer_commands = []
+        self.command_help = {}
+        self.screenshot_path = "output_screenshot.png"
+        self.heartbeat = ConnectionHeartbeat(self.check_drozer_connection)
+        self.heartbeat.status_signal.connect(self.update_status_bar)
+        self.heartbeat.start()
+        self.load_drozer_commands()
+        self.setup_drozer_tab()
+        self.apply_dracula_theme()
+
+    def load_drozer_commands(self):
+        """Load Drozer commands and their help text from a JSON file."""
+        json_path = os.path.join("json", "drozer_commands.json")
+        try:
+            with open(json_path, "r") as file:
+                data = json.load(file)
+                self.drozer_commands = ["Select a command..."] + [cmd["command"] for cmd in data.get("commands", [])]
+                self.command_help = {cmd["command"]: cmd["help"] for cmd in data.get("commands", [])}
+        except FileNotFoundError:
+            self.drozer_commands = ["Select a command..."]
+            self.command_help = {}
+            print("Warning: 'drozer_commands.json' file not found. Using default commands.")
+        except json.JSONDecodeError:
+            self.drozer_commands = ["Select a command..."]
+            self.command_help = {}
+            print("Error: Failed to decode 'drozer_commands.json'. Using default commands.")
+
+    def execute_drozer_command(self):
+        """Execute the selected Drozer command with placeholder prompts."""
+        selected_command = self.command_combobox.currentText()
+        if selected_command == "Select a command...":
+            self.output_area.append("Please select a valid command.")
+            return
+
+        # Find placeholders in the command (e.g., {package}, {uri}, etc.)
+        placeholders = re.findall(r'\{(.*?)\}', selected_command)
+        replacements = {}
+
+        # Replace {package} if it's set
+        if "package" in placeholders and not self.package:
+            self.output_area.append("Please set the package before executing a command.")
+            return
+        replacements['package'] = self.package
+
+        # Prompt the user to fill in values for other placeholders (e.g., {uri}, {ip}, {port})
+        for placeholder in placeholders:
+            if placeholder != 'package':  # Skip package as it's handled
+                value, ok = QInputDialog.getText(self.drozer_tab, f"Enter {placeholder}",
+                                                 f"Please provide a value for {placeholder}:")
+                if ok and value:
+                    replacements[placeholder] = value
+                else:
+                    self.output_area.append(f"Execution canceled: No value provided for {placeholder}.")
+                    return
+
+        # Replace placeholders with actual values in the command
+        command = selected_command.format(**replacements)
+        full_command = f"drozer console connect -c 'run {command}'"
+
+        # Clear the output area before running the next command
+        self.output_area.clear()
+        self.output_area.append(f"Executing: {full_command}")
+
+        # Run the command in a separate thread
+        self.drozer_thread = DrozerThread(full_command)
+        self.drozer_thread.output_signal.connect(self.handle_command_output)
+        self.drozer_thread.start()
+
+    def setup_drozer_tab(self):
+        """Create the layout for the Drozer connection tab."""
+        self.drozer_tab = QWidget()
+        self.drozer_layout = QVBoxLayout(self.drozer_tab)
+
+        # Status Bar
+        self.status_bar = QStatusBar()
+        self.status_label = QLabel("Checking connection...")
+        self.status_bar.addWidget(self.status_label)
+        self.drozer_layout.addWidget(self.status_bar)
+
+        # Create group for package selection
+        package_group = QGroupBox("Package Selection")
+        package_layout = QFormLayout()
+
+        self.package_input = QLineEdit()
+        self.package_input.setPlaceholderText("Enter target package (e.g., com.example.app)")
+        package_layout.addRow("Target Package:", self.package_input)
+
+        self.set_package_button = QPushButton("Set Package")
+        self.set_package_button.clicked.connect(self.set_package)
+        package_layout.addRow(self.set_package_button)
+
+        package_group.setLayout(package_layout)
+        self.drozer_layout.addWidget(package_group)
+
+        # Create group for command selection
+        command_group = QGroupBox("Drozer Command")
+        command_layout = QVBoxLayout()
+
+        self.command_combobox = QComboBox()
+        self.command_combobox.addItems(self.drozer_commands)
+        self.command_combobox.currentIndexChanged.connect(self.update_command_help)
+        command_layout.addWidget(self.command_combobox)
+
+        self.command_help_text = QTextEdit()
+        self.command_help_text.setReadOnly(True)
+        command_layout.addWidget(self.command_help_text)
+
+        self.execute_button = QPushButton("Execute Command")
+        self.execute_button.clicked.connect(self.execute_drozer_command)
+        command_layout.addWidget(self.execute_button)
+
+        command_group.setLayout(command_layout)
+        self.drozer_layout.addWidget(command_group)
+
+        # Output area
+        self.output_area = QTextEdit()
+        self.output_area.setReadOnly(True)
+        self.drozer_layout.addWidget(self.output_area)
+
+        # Screenshot button
+        self.screenshot_button = QPushButton("Take Screenshot of Output")
+        self.screenshot_button.clicked.connect(self.select_screenshot_path)
+        self.drozer_layout.addWidget(self.screenshot_button)
+
+        self.parent.subtab_widget.addTab(self.drozer_tab, "Drozer")
+
+    def apply_dracula_theme(self):
+        """Apply the Dracula theme to the widgets."""
+        theme_colors = {
+            "background": "#282a36",
+            "text": "#f8f8f2",
+            "button_bg": "#44475a",
+            "button_text": "#f8f8f2",
+            "highlight": "#bd93f9"
+        }
+        
+        self.drozer_tab.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme_colors['background']};
+                color: {theme_colors['text']};
+            }}
+            QPushButton {{
+                background-color: {theme_colors['button_bg']};
+                color: {theme_colors['button_text']};
+                border: 1px solid {theme_colors['highlight']};
+            }}
+            QPushButton:hover {{
+                background-color: {theme_colors['highlight']};
+            }}
+            QLineEdit {{
+                background-color: {theme_colors['button_bg']};
+                color: {theme_colors['text']};
+                border: 1px solid {theme_colors['highlight']};
+            }}
+            QTextEdit {{
+                background-color: {theme_colors['button_bg']};
+                color: {theme_colors['text']};
+                border: 1px solid {theme_colors['highlight']};
+            }}
+            QComboBox {{
+                background-color: {theme_colors['button_bg']};
+                color: {theme_colors['text']};
+                border: 1px solid {theme_colors['highlight']};
+            }}
+        """)
+
+    def check_drozer_connection(self):
+        """Check if Drozer is connected."""
+        try:
+            # Placeholder command to check connection status
+            result = subprocess.run("drozer console connect -c 'run some_command'", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            return result.returncode == 0
+        except Exception as e:
+            print(f"Error checking Drozer connection: {e}")
+            return False
+
+    def update_status_bar(self, connected):
+        """Update the status bar with the connection status."""
+        if connected:
+            self.status_label.setText("Drozer is connected.")
+            self.status_label.setStyleSheet("color: #50fa7b;")  # Green
+        else:
+            self.status_label.setText("Drozer is not connected.")
+            self.status_label.setStyleSheet("color: #ff5555;")  # Red
+
+    def update_command_help(self):
+        """Update the command help text based on the selected command."""
+        selected_command = self.command_combobox.currentText()
+        help_text = self.command_help.get(selected_command, "No help available for this command.")
+        self.command_help_text.setPlainText(help_text)
+
+    def set_package(self):
+        """Set the selected package for Drozer commands."""
+        self.package = self.package_input.text().strip()
+        if self.package:
+            self.output_area.append(f"Package set to: {self.package}")
+        else:
+            self.output_area.append("Please enter a valid package name.")
+
+
+    def handle_command_output(self, output):
+        """Handle the output from the Drozer command."""
+        self.output_area.append(output)  # Append the HTML-formatted text
+        self.output_area.ensureCursorVisible()  # Ensure new output is scrolled into view
+
+
+    def select_screenshot_path(self):
+        """Allow user to select the file path for the screenshot."""
+        file_path, _ = QFileDialog.getSaveFileName(self.drozer_tab, "Save Screenshot As", self.screenshot_path,
+                                                   "PNG Images (*.png);;All Files (*)")
+        if file_path:
+            self.screenshot_path = file_path
+            self.take_screenshot()
+
+    def take_screenshot(self):
+        """Take a screenshot of the output area."""
+        if not os.path.exists(os.path.dirname(self.screenshot_path)):
+            os.makedirs(os.path.dirname(self.screenshot_path))
+        screenshot = self.output_area.grab()
+        screenshot.save(self.screenshot_path)
+        self.output_area.append(f"Screenshot saved as '{self.screenshot_path}'.")
+
+    def closeEvent(self, event):
+        """Ensure to stop the heartbeat thread when closing the tab."""
+        self.heartbeat.stop()
+        self.heartbeat.wait()
+        super().closeEvent(event)
+
+
+class NucleiWorker(QThread):
+    nuclei_output = pyqtSignal(str)
+    nuclei_finished = pyqtSignal(str)
+
+    def __init__(self, target_url, proxy=None, output_file="output.json"):
+        super().__init__()
+        self.target_url = target_url
+        self.proxy = proxy
+        self.output_file = output_file
+
+    def get_nuclei_path(self):
+        """Return the correct nuclei path based on the operating system."""
+        system = platform.system()
+        
+        if system == "Windows":
+            nuclei_path = os.path.join("tools", "nuclei_3.3.2_windows_amd64", "nuclei.exe")
+        elif system == "Linux":
+            nuclei_path = os.path.join("tools", "nuclei_3.3.2_linux_amd64", "nuclei")
+        # elif system == "Darwin": # added removed for now
+        #     nuclei_path = os.path.join("tools", "nuclei_3.3.2_darwin_amd64", "nuclei")
+        else:
+            raise Exception("Unsupported operating system")
+        
+        return nuclei_path
+
+    def run(self):
+        try:
+            # Get the correct path to the nuclei binary based on the OS
+            nuclei_path = self.get_nuclei_path()
+
+            # Check if the nuclei binary exists at the specified path
+            if not os.path.exists(nuclei_path):
+                error_message = f"Nuclei binary not found at {nuclei_path}. Please check the path."
+                self.nuclei_finished.emit(f"Error: {error_message}")
+                return
+
+            # Build the command with the correct nuclei binary
+            command = [nuclei_path, "-u", self.target_url, "-json-export", self.output_file]
+
+            if self.proxy:
+                command.extend(["-proxy", self.proxy])
+
+            # Execute the command
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+            # Read and emit output line by line
+            while True:
+                output_line = process.stdout.readline()
+                if output_line == "" and process.poll() is not None:
+                    break
+                if output_line:
+                    self.nuclei_output.emit(output_line.strip())
+
+            # Wait for the process to complete
+            process.wait()
+
+            # Check the return code and emit the final output
+            if process.returncode == 0:
+                with open(self.output_file, 'r') as f:
+                    output = f.read()
+                self.nuclei_finished.emit(output)
+            else:
+                error_output = process.stderr.read().strip()
+                self.nuclei_finished.emit(f"Error: {error_output}")
+
+        except Exception as e:
+            self.nuclei_finished.emit(f"Exception: {str(e)}")
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -1076,11 +2533,24 @@ class MainWindow(QMainWindow):
         self.portforward_ssh_process = None
         self.df = None
         self.client_id = None
+        self.validator_thread = None
         self.report_id = None
         self.nessus_findings_map = {}
-        self.setWindowTitle("Bulletproof Solutions Testing Interface")
-        self.setGeometry(100, 100, 2200, 1200)
+        self.setWindowTitle("BSTI")
+      
+        screen = QApplication.primaryScreen()
+        screen_geometry = screen.geometry()
+        available_geometry = screen.availableGeometry()
+        taskbar_height = screen_geometry.height() - available_geometry.height()
+        self.setGeometry(0, 0, available_geometry.width(), available_geometry.height() - taskbar_height)
         self.threads = []
+        
+        # mobsf -> normalized
+        self.severity_map = {
+            "High": "Medium",
+            "Warning": "Low",
+            "Info": "Informational"
+        }
 
         self.layout = QVBoxLayout()
         self.central_widget = QWidget()
@@ -1170,6 +2640,12 @@ class MainWindow(QMainWindow):
         self.report_findings_action = QAction("Upload Findings to Plextrac", self)
         self.report_findings_action.triggered.connect(self.report_findings_execution)
         self.report_menu.addAction(self.report_findings_action)
+        
+        # Download binaries menu
+        self.binary_menu = self.menu_bar.addMenu("Addons")
+        self.binary_menu_action = QAction("Download additional tools")
+        self.binary_menu_action.triggered.connect(self.open_binary_download_menu)
+        self.binary_menu.addAction(self.binary_menu_action)
 
         # Help menu for docs
         self.help_menu = self.menu_bar.addMenu("Help")
@@ -1235,9 +2711,18 @@ class MainWindow(QMainWindow):
         # Add NMB tab
         self.setup_nmb_tab()
 
-        # New! added zeus tab
-        self.setup_zeus_tab()
+        # added zeus tab
+        self.setup_webapp_tab()
+        
+        # Mobile testing tab
+        self.setup_mobile_testing_tab()
+        
+        # Adding the Screenshot Editor tab
+        self.screenshot_editor_tab = ScreenshotEditorTab()
+        # self.tab_widget.addTab(self.screenshot_editor_tab, "Screenshot Editor") hiding for now #FIXME
+        self.screenshot_editor_tab.is_custom_tab = True
 
+        
         # View Logs Tab
         self.logs_tab = QWidget()
         self.logs_layout = QVBoxLayout(self.logs_tab)
@@ -1286,14 +2771,1757 @@ class MainWindow(QMainWindow):
         # hide/show tabs based on active tab
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
         
+    def open_binary_download_menu(self):
+        download_widget = BinaryDownloadWidget()
+        
+        download_widget.is_custom_tab = True
+        tab_index = self.tab_widget.addTab(download_widget, "Download Addons")
+        
+        # Add close button to the download tab
+        self.add_close_button_to_tab(download_widget, tab_index)
+
+        self.tab_widget.setCurrentIndex(tab_index)
+        
+        
+        
+    def setup_mobile_testing_tab(self):
+        # load mapping from mobsf names to pluginIDS
+        self.plugin_id_mapping = {} 
+        self.load_plugin_id_mapping("mobsf.json")
+        
+        # Load common false positives from file
+        self.load_common_false_positives("false_positives.txt")
+
+        # Create the mobile pentesting tab
+        self.mobile_tab = QWidget()
+        self.mobile_tab.is_custom_tab = True
+        self.mobile_layout = QVBoxLayout(self.mobile_tab)
+
+        # Create a subtab widget
+        self.subtab_widget = QTabWidget(self.mobile_tab)
+        self.mobile_layout.addWidget(self.subtab_widget)
+
+        # Automated Testing Subtab
+        self.automated_tab = QWidget()
+        self.automated_layout = QVBoxLayout(self.automated_tab)
+
+        # File selection group box
+        file_group = QGroupBox("File Selection")
+        file_group_layout = QFormLayout()
+        self.file_selection_label = QLabel("Choose IPA/APK file:")
+        self.file_selection_button = QPushButton("Browse...")
+        self.file_selection_button.clicked.connect(self.select_file)
+        self.selected_file_label = QLabel("No file selected")
+
+        # Improve font readability
+        font = self.file_selection_label.font()
+        font.setPointSize(12)
+        self.file_selection_label.setFont(font)
+        self.file_selection_button.setFont(font)
+        self.selected_file_label.setFont(font)
+
+        file_group_layout.addRow(self.file_selection_label, self.file_selection_button)
+        file_group_layout.addRow(self.selected_file_label)
+        file_group.setLayout(file_group_layout)
+        self.automated_layout.addWidget(file_group)
+
+        # MobSF connection group box
+        mobsf_group = QGroupBox("MobSF Connection")
+        mobsf_group_layout = QFormLayout()
+        self.mobsf_label = QLabel("MobSF Instance URL:")
+        self.mobsf_url_input = QLineEdit()
+        self.mobsf_url_input.setPlaceholderText("Enter MobSF instance URL")
+
+        self.load_saved_mobsf_url()
+
+        self.connect_mobsf_button = QPushButton("Start Scan")
+        self.connect_mobsf_button.clicked.connect(self.run_mobsf_scan)
+
+        # Improve font readability
+        self.mobsf_label.setFont(font)
+        self.mobsf_url_input.setFont(font)
+        self.connect_mobsf_button.setFont(font)
+
+        mobsf_group_layout.addRow(self.mobsf_label, self.mobsf_url_input)
+        mobsf_group_layout.addRow(self.connect_mobsf_button)
+
+        # Add status bar
+        self.status_label = QLabel()
+        self.status_label.setFont(QFont('Arial', 12, QFont.Bold))  # Bold font
+        self.status_label.setStyleSheet("color: #ff5555;")  # Red color for visibility
+        self.status_label.setText("Scanner: Ready")
+
+        mobsf_group_layout.addRow(self.status_label)
+        mobsf_group.setLayout(mobsf_group_layout)
+        self.automated_layout.addWidget(mobsf_group)
+
+        # Results table widget
+        results_widget = QWidget()
+        results_layout = QVBoxLayout(results_widget)
+
+        # Create and style the results table
+        self.results_table = QTableWidget()
+        self.results_table.setColumnCount(3)
+        self.results_table.setHorizontalHeaderLabels(["Finding", "Severity", "Common False Positive"])
+
+        # Ensure the results table expands to fill available space
+        self.results_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.results_table.horizontalHeader().setStretchLastSection(True)
+
+        # Set all columns to stretch to fill available space
+        for i in range(self.results_table.columnCount()):
+            self.results_table.horizontalHeader().setSectionResizeMode(i, QHeaderView.Stretch)
+
+        # Add the results table to the results widget
+        results_layout.addWidget(self.results_table)
+
+        # Add the results widget to the layout
+        self.automated_layout.addWidget(results_widget)
+
+        # Bottom bar for exporting and resetting
+        bottom_bar = QHBoxLayout()
+
+        self.export_button = QPushButton("Export Report")
+        self.export_button.clicked.connect(self.export_report)
+        bottom_bar.addWidget(self.export_button)
+
+        self.reset_button = QPushButton("Reset Changes")
+        self.reset_button.clicked.connect(self.reset_changes)
+        bottom_bar.addWidget(self.reset_button)
+
+        # Add the bottom bar to the layout
+        self.automated_layout.addLayout(bottom_bar)
+
+        # Set stretch factors to ensure the table uses available space
+        self.automated_layout.setStretchFactor(file_group, 0)
+        self.automated_layout.setStretchFactor(mobsf_group, 0)
+        self.automated_layout.setStretchFactor(results_widget, 1)
+
+        # Adjust row heights dynamically based on content
+        self.results_table.resizeRowsToContents()
+
+        # Initialize exclusions set
+        self.excluded_items = set()
+
+        # Initialize original data storage
+        self.original_data = []
+
+        self.start_mobsf_heartbeat()
+
+        # Add context menu for results table
+        self.results_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.results_table.customContextMenuRequested.connect(self.show_context_menu)
+
+        # Add Automated Testing subtab
+        self.subtab_widget.addTab(self.automated_tab, "Automated Testing")
+
+        self.setup_objection_tab()
+
+        self.subtab_widget.addTab(self.objection_tab, "Workflows")
+        
+        # Add "Decompiler" Subtab
+        self.decompiler_tab = QWidget()
+        self.decompiler_layout = QVBoxLayout(self.decompiler_tab)
+
+        # Create a plain text edit for displaying XML
+        self.xml_display = QTextEdit(self)
+        self.xml_display.setReadOnly(True)
+        self.xml_display.setStyleSheet("""
+            QTextEdit {
+                background-color: #282a36;
+                color: #f8f8f2;
+                font-family: 'Courier New';
+                font-size: 12pt;
+                border: 1px solid #44475a; 
+                padding: 10px;
+            }
+        """)
+
+
+        self.decompiler_layout.addWidget(self.xml_display)
+        
+        self.search_results = []  # List to store search results
+        self.current_result_index = -1  # Index of the current search result
+
+        
+
+        # Create a search bar
+        self.search_bar = QLineEdit()
+        self.search_bar.setPlaceholderText("Search in XML...")
+        self.search_bar.setStyleSheet("""
+            QLineEdit {
+                background-color: #44475a; 
+                color: #f8f8f2;
+                font-family: 'Courier New';
+                font-size: 12pt;
+                border: 1px solid #6272a4;
+                padding: 5px;
+                selection-background-color: #bd93f9;
+            }
+        """)
+        self.search_bar.textChanged.connect(self.highlight_search_text)
+
+        self.decompiler_layout.addWidget(self.search_bar)
+        
+        # Create navigation buttons for search
+        self.prev_button = QPushButton("Previous")
+        self.next_button = QPushButton("Next")
+        self.prev_button.clicked.connect(self.go_to_previous_result)
+        self.next_button.clicked.connect(self.go_to_next_result)
+
+        # Style navigation buttons
+        self.prev_button.setStyleSheet("""
+            QPushButton {
+                background-color: #44475a;
+                color: #f8f8f2;
+                font-size: 12pt;
+                border: 1px solid #6272a4;
+                padding: 5px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #6272a4;
+            }
+        """)
+        
+        self.next_button.setStyleSheet("""
+            QPushButton {
+                background-color: #44475a;
+                color: #f8f8f2;
+                font-size: 12pt;
+                border: 1px solid #6272a4;
+                padding: 5px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #6272a4;
+            }
+        """)
+
+        # Add navigation buttons to layout
+        button_layout = QHBoxLayout()
+        button_layout.addWidget(self.prev_button)
+        button_layout.addWidget(self.next_button)
+        self.decompiler_layout.addLayout(button_layout)
+        
+        # Setup validator tab
+        self.validator_tab = QWidget()
+        self.validator_layout = QVBoxLayout(self.validator_tab)
+
+        # File selection group box for AndroidManifest.xml
+        manifest_group = QGroupBox("AndroidManifest.xml Selection")
+        manifest_group_layout = QFormLayout()
+        self.manifest_label = QLabel("Choose AndroidManifest.xml file:")
+        self.manifest_button = QPushButton("Browse...")
+        self.manifest_button.clicked.connect(self.select_manifest_file)
+        self.selected_manifest_label = QLabel("No file selected")
+
+        # Styling
+        font = self.manifest_label.font()
+        font.setPointSize(12)
+        self.manifest_label.setFont(font)
+        self.manifest_button.setFont(font)
+        self.selected_manifest_label.setFont(font)
+
+        manifest_group_layout.addRow(self.manifest_label, self.manifest_button)
+        manifest_group_layout.addRow(self.selected_manifest_label)
+        manifest_group.setLayout(manifest_group_layout)
+        self.validator_layout.addWidget(manifest_group)
+
+        # Directory selection group box for output directory
+        output_group = QGroupBox("Output Directory Selection")
+        output_group_layout = QFormLayout()
+        self.output_label = QLabel("Choose Output Directory:")
+        self.output_button = QPushButton("Browse...")
+        self.output_button.clicked.connect(self.select_output_directory)
+        self.selected_output_label = QLabel("No directory selected")
+
+        # Styling
+        self.output_label.setFont(font)
+        self.output_button.setFont(font)
+        self.selected_output_label.setFont(font)
+
+        output_group_layout.addRow(self.output_label, self.output_button)
+        output_group_layout.addRow(self.selected_output_label)
+        output_group.setLayout(output_group_layout)
+        self.validator_layout.addWidget(output_group)
+        
+        # Add a "Run Validator" button
+        self.run_validator_button = QPushButton("Run Validator")
+        self.run_validator_button.clicked.connect(self.run_validator)
+        self.run_validator_button.setFont(font)
+        self.run_validator_button.setStyleSheet("""
+            QPushButton {
+                background-color: #44475a;
+                color: #f8f8f2;
+                font-size: 12pt;
+                border: 1px solid #6272a4;
+                padding: 5px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #6272a4;
+            }
+        """)
+        self.validator_layout.addWidget(self.run_validator_button)
+        
+        # setup output area validator
+        self.validator_output_area = QTextEdit(self.validator_tab)
+        self.validator_output_area.setReadOnly(True)
+        self.validator_output_area.setStyleSheet("""
+            QTextEdit {
+                background-color: #282a36;
+                color: #f8f8f2;
+                font-family: 'Courier New';
+                font-size: 12pt;
+                border: 1px solid #44475a;
+                padding: 10px;
+            }
+        """)
+        self.validator_layout.addWidget(self.validator_output_area)
+        
+        # Add the new tab to the tab widget
+        self.subtab_widget.addTab(self.decompiler_tab, "Inspector")
+
+        # Add Validator Subtab to the mobile pentesting tab
+        self.subtab_widget.addTab(self.validator_tab, "Validator")
+        
+        # Explore tab
+        self.setup_explorer_tab()
+        
+        # Create the APKLeaks subtab
+        self.apkleaks_tab = QWidget()
+        self.apkleaks_layout = QVBoxLayout(self.apkleaks_tab)
+
+        # File selection group box
+        apk_group = QGroupBox("APK File Selection")
+        apk_group_layout = QFormLayout()
+        self.apk_label = QLabel("Choose APK file:")
+        self.apk_button = QPushButton("Browse...")
+        self.apk_button.clicked.connect(self.select_apk_file)
+        self.selected_apk_label = QLabel("No file selected")
+
+        # Improve font readability
+        self.apk_label.setFont(font)
+        self.apk_button.setFont(font)
+        self.selected_apk_label.setFont(font)
+
+        apk_group_layout.addRow(self.apk_label, self.apk_button)
+        apk_group_layout.addRow(self.selected_apk_label)
+        apk_group.setLayout(apk_group_layout)
+        self.apkleaks_layout.addWidget(apk_group)
+
+        # Start scan button
+        self.start_apkleaks_button = QPushButton("Start APKLeaks Scan")
+        self.start_apkleaks_button.clicked.connect(self.start_apkleaks_scan)
+        self.start_apkleaks_button.setFont(font)
+        self.apkleaks_layout.addWidget(self.start_apkleaks_button)
+
+        # Output area
+        self.apkleaks_output_area = QTextEdit(self.apkleaks_tab)
+        self.apkleaks_output_area.setReadOnly(True)
+        self.apkleaks_output_area.setStyleSheet("""
+            QTextEdit {
+                background-color: #282a36;
+                color: #f8f8f2;
+                font-family: 'Courier New';
+                font-size: 12pt;
+                border: 1px solid #44475a;
+                padding: 10px;
+            }
+        """)
+        self.apkleaks_layout.addWidget(self.apkleaks_output_area)
+
+        # Status label
+        self.apkleaks_status_label = QLabel("Scanner: Ready")
+        self.apkleaks_status_label.setFont(QFont('Arial', 12, QFont.Bold))  # Bold font
+        self.apkleaks_status_label.setStyleSheet("color: #ff5555;")  # Red color for visibility
+        self.apkleaks_layout.addWidget(self.apkleaks_status_label)
+
+    
+
+        # Add APKLeaks subtab to the main tab widget
+        self.subtab_widget.addTab(self.apkleaks_tab, "APK Secrets")
+
+        # Add the main tab to the tab widget
+        self.drozer_tab_handler = DrozerTab(self)
+
+        self.tab_widget.addTab(self.mobile_tab, "Mobile Pentesting")
+        
+    def setup_explorer_tab(self):
+        self.explorer_tab = ExplorerSubTab()
+        self.subtab_widget.addTab(self.explorer_tab, "Decompiler")
+
+    def decompile_apk(self, apk_path):
+        apk_name = os.path.splitext(os.path.basename(apk_path))[0]
+        output_dir = os.path.join("decompiled", apk_name)
+        os.makedirs(output_dir, exist_ok=True)
+        self.explorer_tab.start_decompile(apk_path, output_dir)
+
+    def select_apk_file(self):
+        options = QFileDialog.Options()
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select APK File", "", "APK Files (*.apk);;All Files (*)", options=options)
+        if file_path:
+            self.selected_apk_label.setText(file_path)
+
+    def start_apkleaks_scan(self):
+        # Get the selected APK file and additional arguments
+        apk_file = self.selected_apk_label.text()
+
+        # Validate file selection
+        if apk_file == "No file selected":
+            self.apkleaks_status_label.setText("Error: No APK file selected.")
+            return
+
+        # Disable the scan button and update status
+        self.start_apkleaks_button.setEnabled(False)
+        self.apkleaks_status_label.setText("Scanning in progress...")
+
+        # Create a new thread to run APKLeaks
+        self.apkleaks_thread = APKLeaksThread(apk_file)
+        
+        # Connect the result signal to update the output area
+        self.apkleaks_thread.result_signal.connect(self.display_apkleaks_results)
+        
+        # Start the thread
+        self.apkleaks_thread.start()
+
+    def display_apkleaks_results(self, results):
+        # Update the output area with the results
+        self.apkleaks_output_area.setPlainText(results)
+        self.apkleaks_status_label.setText("Scan complete.")
+        # Re-enable the scan button
+        self.start_apkleaks_button.setEnabled(True)
+
+        
+    def run_validator(self):
+        xml_file = self.selected_manifest_label.text()
+        output_dir = self.selected_output_label.text()
+
+        if not xml_file or not output_dir:
+            self.show_error_message("Please select a valid XML file and output directory.")
+            return
+
+        # Clear the output area before running the validator
+        self.validator_output_area.clear()
+
+        # Create and start the thread
+        self.validator_thread = ValidatorRunner(xml_file, output_dir)
+        self.validator_thread.output_received.connect(self.append_output)
+        self.validator_thread.finished.connect(self.on_validator_finished)
+        self.validator_thread.error_occurred.connect(self.on_validator_error)
+        self.validator_thread.start()
+
+    def append_output(self, output):
+        self.validator_output_area.append(output)
+        self.validator_output_area.moveCursor(QTextCursor.End)
+
+
+
+
+    def on_validator_finished(self):
+        self.append_output("Validation complete.")
+
+    def on_validator_error(self, error_message):
+        self.append_output(f"Error: {error_message}")
+
+    def show_error_message(self, message):
+        QMessageBox.critical(self, "Error", message)
+
+    def show_info_message(self, message):
+        QMessageBox.information(self, "Info", message)
+        
+        
+    def select_manifest_file(self):
+        file_dialog = QFileDialog()
+        file_dialog.setNameFilter("XML files (*.xml)")
+        if file_dialog.exec_():
+            selected_file = file_dialog.selectedFiles()[0]
+            self.selected_manifest_label.setText(selected_file)
+
+    def select_output_directory(self):
+        directory = QFileDialog.getExistingDirectory(self, "Select Output Directory")
+        if directory:
+            self.selected_output_label.setText(directory)
+
+    def go_to_previous_result(self):
+        if self.search_results:
+            self.current_result_index = (self.current_result_index - 1) % len(self.search_results)
+            self.jump_to_result(self.current_result_index)
+
+    def go_to_next_result(self):
+        if self.search_results:
+            self.current_result_index = (self.current_result_index + 1) % len(self.search_results)
+            self.jump_to_result(self.current_result_index)
+
+    def jump_to_result(self, index):
+        if self.search_results and 0 <= index < len(self.search_results):
+            cursor = self.search_results[index]
+            self.xml_display.setTextCursor(cursor)
+            self.xml_display.ensureCursorVisible()
+
+            
+    def highlight_search_text(self):
+        search_text = self.search_bar.text().strip()
+        cursor = self.xml_display.textCursor()
+
+        # Reset all previous highlights
+        cursor.setPosition(0)
+        self.xml_display.selectAll()
+        clear_format = QTextCharFormat()
+        clear_format.setBackground(QColor("#282a36"))  # Match the background color
+        cursor.mergeCharFormat(clear_format)
+        cursor.clearSelection()
+        self.xml_display.setTextCursor(cursor)
+
+        self.search_results = []  # Clear previous search results
+        self.current_result_index = -1  # Reset current result index
+
+        if search_text:
+            highlight_format = QTextCharFormat()
+            # highlight_format.setBackground(QColor("red"))
+
+            cursor.setPosition(0)
+            while True:
+                cursor = self.xml_display.document().find(search_text, cursor, QTextDocument.FindWholeWords)
+                if cursor.isNull():
+                    break
+                self.search_results.append(cursor)  # Store cursor positions for results
+                cursor.mergeCharFormat(highlight_format)
+
+            if self.search_results:
+                self.current_result_index = 0
+                self.jump_to_result(self.current_result_index)
+
+
+
+
+    def setup_objection_tab(self):
+        self.objection_tab = QWidget()
+        self.objection_layout = QVBoxLayout(self.objection_tab)
+
+        # Create horizontal layout for panels
+        self.panels_layout = QHBoxLayout()
+        
+        self.left_panel = QVBoxLayout()
+        self.right_panel = QVBoxLayout()
+
+        # Setup Workflow Area
+        self.setup_workflow_area()
+
+        # Setup Command Area
+        self.setup_command_area()
+
+        # Add panels to the horizontal layout
+        self.panels_layout.addLayout(self.left_panel, 1)
+        self.panels_layout.addLayout(self.right_panel, 1)
+
+        # Add the panels layout to the main vertical layout
+        self.objection_layout.addLayout(self.panels_layout)
+
+        # Status label at the bottom
+        self.objection_status_label = QLabel("Emulator Status: Disconnected")
+        self.set_status_label_style(False)
+        self.objection_layout.addWidget(self.objection_status_label)
+
+    def setup_workflow_area(self):
+        workflow_group = QGroupBox("Workflows")
+        workflow_layout = QVBoxLayout()
+
+        # Workflow Dropdown
+        self.workflow_combo = QComboBox()
+        self.load_workflows()
+        self.workflow_combo.setStyleSheet("""
+            background-color: #44475a;
+            color: #f8f8f2;
+            border: 1px solid #44475a;
+        """)
+        self.workflow_combo.currentIndexChanged.connect(self.display_workflow_details)
+        workflow_layout.addWidget(self.workflow_combo)
+
+        # Tree view for workflow commands
+        self.workflow_editor = WorkflowEditor()
+        workflow_layout.addWidget(self.workflow_editor)
+
+        # Button to execute selected workflow
+        self.execute_workflow_button = QPushButton("Execute Workflow")
+        self.execute_workflow_button.setStyleSheet("""
+            background-color: #bd93f9;
+            color: #282a36;
+            border-radius: 5px;
+            padding: 10px;
+        """)
+        self.execute_workflow_button.clicked.connect(self.execute_selected_workflow)
+        workflow_layout.addWidget(self.execute_workflow_button)
+
+        workflow_group.setLayout(workflow_layout)
+        self.left_panel.addWidget(workflow_group)
+
+
+    def setup_command_area(self):
+        command_group = QGroupBox("Commands")
+        command_layout = QVBoxLayout()
+
+        # Emulator IP and Port configuration
+        ip_port_group = QGroupBox("Emulator IP and Port")
+        ip_port_layout = QFormLayout()
+        self.emulator_ip_input = QLineEdit()
+        self.emulator_port_input = QLineEdit()
+        default_ip, default_port = self.get_default_adb_device()
+        self.emulator_ip_input.setText(default_ip)
+        self.emulator_port_input.setText(default_port)
+        ip_port_layout.addRow("IP Address:", self.emulator_ip_input)
+        ip_port_layout.addRow("Port:", self.emulator_port_input)
+        ip_port_group.setLayout(ip_port_layout)
+        command_layout.addWidget(ip_port_group)
+
+        # Confirm and Heartbeat button
+        self.confirm_heartbeat_button = QPushButton("Confirm Connection")
+        self.confirm_heartbeat_button.setStyleSheet("""
+            background-color: #50fa7b;
+            color: #282a36;
+            border-radius: 5px;
+            padding: 10px;
+            font-weight: bold;
+        """)
+        self.confirm_heartbeat_button.clicked.connect(self.confirm_and_heartbeat_connection)
+        command_layout.addWidget(self.confirm_heartbeat_button)
+
+        # Console output area
+        self.console_output = QTextEdit()
+        self.console_output.setReadOnly(True)
+        self.console_output.setStyleSheet("""
+            background-color: #282a36;
+            color: #f8f8f2;
+            font-family: Consolas, monospace;
+            border: 1px solid #44475a;
+        """)
+        command_layout.addWidget(self.console_output)
+
+        # Clear console button
+        self.clear_console_button = QPushButton("Clear Console")
+        self.clear_console_button.setStyleSheet("""
+            background-color: #ff5555;
+            color: #282a36;
+            border-radius: 5px;
+            padding: 10px;
+        """)
+        self.clear_console_button.clicked.connect(self.clear_console_output)
+        command_layout.addWidget(self.clear_console_button)
+
+        command_group.setLayout(command_layout)
+        self.right_panel.addWidget(command_group)
+
+    def load_workflows(self):
+        workflows_file = os.path.join("commands", "workflows.json")
+        if os.path.isfile(workflows_file):
+            with open(workflows_file, 'r') as file:
+                data = json.load(file)
+                workflows = data.get('workflows', {})
+                
+                # Add a prompt to the combo box
+                self.workflow_combo.addItem("Select a workflow ...")
+                
+                for name in workflows.keys():
+                    self.workflow_combo.addItem(name)
+
+    def display_workflow_details(self):
+        workflow_name = self.workflow_combo.currentText()
+        
+        # Check if the user hasn't selected a workflow
+        if workflow_name == "Select a workflow ...":
+            self.console_output.append("Please select a valid workflow.")
+            return
+        
+        workflows_file = os.path.join("commands", "workflows.json")
+        if os.path.isfile(workflows_file):
+            with open(workflows_file, 'r') as file:
+                data = json.load(file)
+                workflow = data.get('workflows', {}).get(workflow_name, {})
+                if workflow:
+                    self.workflow_editor.load_workflow_from_file(workflow)
+
+    def execute_selected_workflow(self):
+        workflow_name = self.workflow_combo.currentText()
+
+        # Check if the user hasn't selected a workflow
+        if workflow_name == "Select a workflow ...":
+            self.console_output.append("Please select a valid workflow.")
+            return
+
+        workflows_file = os.path.join("commands", "workflows.json") # why you define this 3 times fix it 
+        if os.path.isfile(workflows_file):
+            try:
+                with open(workflows_file, 'r') as file:
+                    data = json.load(file)
+                    workflow = data.get('workflows', {}).get(workflow_name, {})
+                    commands = workflow.get('commands', [])
+                    
+                    # List to store processed commands
+                    processed_commands = []
+
+                    for command_dict in commands:
+                        command = command_dict.get('command', '')
+
+                        # Identify placeholders like <example_arg>
+                        placeholders = re.findall(r'<(.*?)>', command)
+
+                        for placeholder in placeholders:
+                            # Prompt the user to fill in the placeholder
+                            value, ok = QInputDialog.getText(self, "Input Required",
+                                                            f"Please provide a value for '{placeholder}':")
+                            if ok and value:
+                                # Replace the placeholder with the provided value
+                                command = command.replace(f"<{placeholder}>", value)
+                            else:
+                                self.console_output.append(f"Command execution canceled: missing value for '{placeholder}'.")
+                                return
+
+                        processed_commands.append(command)
+                    
+                    if processed_commands:
+                        self.console_output.append(f"Executing workflow: {workflow_name}")
+                        log_file = os.path.join("logs", f"{workflow_name.replace(' ', '_')}-workflow.log")
+                        self.run_command_in_thread(processed_commands, log_file)
+                    else:
+                        self.console_output.append("No commands found for the selected workflow.")
+            
+            except Exception as e:
+                self.console_output.append(f"Error loading workflow: {str(e)}")
+
+
+
+
+
+    def save_workflow_changes(self):
+        workflow_name = self.workflow_combo.currentText()
+        workflows_file = "commands/workflows.json"
+        
+        # Save the current workflow
+        workflow_data = self.workflow_editor.save_workflow()
+        if workflow_data is not None:
+            if os.path.isfile(workflows_file):
+                try:
+                    with open(workflows_file, 'r+') as file:
+                        data = json.load(file)
+                        data['workflows'][workflow_name] = workflow_data
+                        file.seek(0)
+                        json.dump(data, file, indent=4)
+                        file.truncate()
+                except Exception as e:
+                    self.console_output.append(f"Error saving workflow changes: {str(e)}")
+
+        
+
+    def run_command_in_thread(self, commands, log_file):
+        self.command_thread = CommandThread(commands, log_file)
+        self.command_thread.output_signal.connect(self.console_output.append)
+        self.command_thread.error_signal.connect(self.console_output.append)
+        self.command_thread.start()
+
+
+    def clear_console_output(self):
+        self.console_output.clear()
+
+    
+
+    def get_default_adb_device(self):
+        try:
+            result = subprocess.check_output(['adb', 'devices']).decode()
+            for line in result.splitlines():
+                if "\tdevice" in line:
+                    parts = line.split()
+                    if len(parts) > 0:
+                        # Check if it's an emulator (starts with "emulator-")
+                        if parts[0].startswith("emulator-"):
+                            return parts[0], None  # Emulators typically do not have a port in the output
+                        # Check for devices with ip:port format
+                        ip_port = parts[0].split(":")
+                        if len(ip_port) == 2:
+                            return ip_port[0], ip_port[1]
+            return None, None  # No valid devices found
+        except Exception as e:
+            print(f"Error getting default adb device: {e}")
+            return None, None
+
+
+    def confirm_and_heartbeat_connection(self):
+        ip = self.emulator_ip_input.text()
+        port = self.emulator_port_input.text()
+        device_name = f"{ip}:{port}" if ip and port else "emulator-5554"  # Default to a common emulator name if empty
+        self.console_output.append(f"Confirming connection to {device_name}...")
+
+        try:
+            # Only use adb connect if it's an IP:port combo
+            if ':' in device_name:
+                result = subprocess.check_output(['adb', 'connect', device_name]).decode()
+                self.console_output.append(result)
+
+            result = subprocess.check_output(['adb', 'devices']).decode()
+            if any(f"{device_name}\tdevice" in line for line in result.splitlines()):
+                self.console_output.append("Connection successful. Starting heartbeat...")
+                self.update_emulator_status(True)
+                self.start_heartbeat()
+            else:
+                self.console_output.append("Failed to connect. Please check the IP and Port.")
+                self.update_emulator_status(False)
+        except Exception as e:
+            self.console_output.append(f"Error connecting to emulator: {e}")
+            self.update_emulator_status(False)
+
+
+
+    def start_heartbeat(self):
+        self.heartbeat_timer = QTimer(self)
+        self.heartbeat_timer.timeout.connect(self.check_emulator_status)
+        self.heartbeat_timer.start(7000)  # 7000 milliseconds = 7 seconds
+
+    def check_emulator_status(self):
+        try:
+            result = subprocess.check_output(['adb', 'devices']).decode()
+            if any(f"{self.emulator_ip_input.text()}:{self.emulator_port_input.text()}\tdevice" in line for line in result.splitlines()):
+                self.update_emulator_status(True)
+            else:
+                self.update_emulator_status(False)
+        except Exception as e:
+            self.console_output.append(f"Error during heartbeat: {str(e)}")
+            self.update_emulator_status(False)
+
+    def set_status_label_style(self, is_connected):
+        base_style = "background-color: #282a36; color: {}; font-family: Consolas, monospace; font-weight: bold; font-size: 14px;"
+        color = "green" if is_connected else "red"
+        self.objection_status_label.setStyleSheet(base_style.format(color))
+        self.objection_status_label.setFixedHeight(30) 
+
+
+    def update_emulator_status(self, is_connected):
+        status_text = "Emulator Status: Connected" if is_connected else "Emulator Status: Disconnected"
+        self.objection_status_label.setText(status_text)
+        self.set_status_label_style(is_connected)
+        
+    def load_and_display_manifest(self):
+        mobber = Mobber(mobsf_url=self.mobsf_url_input.text(), app_path=self.selected_file_path)
+        manifest_path = mobber.download_manifest()
+        if manifest_path:
+            with open(manifest_path, 'r') as file:
+                xml_content = file.read()
+            
+            # Apply the XML highlighter
+            self.xml_display.setPlainText(xml_content)
+            self.xml_highlighter = XmlHighlighter(self.xml_display.document())
+        else:
+            self.xml_display.setPlainText("Manifest could not be downloaded.")
+
+    def load_mobsf_url(self):
+        """Load the MobSF URL from the mobsf_config.json file."""
+        config_file = "mobsf_config.json"
+        if os.path.exists(config_file):
+            with open(config_file, 'r') as file:
+                config = json.load(file)
+                mobsf_url = config.get("mobsf_url")
+                if mobsf_url and mobsf_url.startswith("http"):
+                    return mobsf_url
+        return None
+        
+    def save_mobsf_url(self):
+        mobsf_url = self.mobsf_url_input.text()
+        with open("mobsf_config.json", "w") as config_file:
+            json.dump({"mobsf_url": mobsf_url}, config_file)
+
+    def load_saved_mobsf_url(self):
+        try:
+            with open("mobsf_config.json", "r") as config_file:
+                config = json.load(config_file)
+                self.mobsf_url_input.setText(config.get("mobsf_url", ""))
+        except (FileNotFoundError, json.JSONDecodeError):
+            self.mobsf_url_input.setText("")
+        
+        # Save the URL whenever it changes
+        self.mobsf_url_input.textChanged.connect(self.save_mobsf_url)
+
+
+    def start_mobsf_heartbeat(self):
+        self.heartbeat_timer = QTimer(self)
+        self.heartbeat_timer.timeout.connect(self.check_mobsf_connection)
+        self.heartbeat_timer.start(10000)
+
+    def check_mobsf_connection(self):
+        mobsf_url = self.mobsf_url_input.text()
+        
+        # Create and start the connection check thread
+        self.connection_check_thread = MobSFConnectionCheckThread(mobsf_url)
+        self.connection_check_thread.connection_status.connect(self.update_mobsf_status)
+        self.connection_check_thread.start()
+
+    def update_mobsf_status(self, is_connected):
+        if is_connected:
+            self.status_label.setStyleSheet("color: #50fa7b;")  # Green color
+            self.status_label.setText("MobSF: Connected")
+        else:
+            self.status_label.setStyleSheet("color: #ff5555;")  # Red color
+            self.status_label.setText("MobSF: Disconnected")
+        
+    def show_context_menu(self, pos):
+        # Create and show context menu
+        context_menu = QMenu(self)
+        
+        exclude_action = QAction("Exclude from Export", self)
+        exclude_action.triggered.connect(self.exclude_item)
+        context_menu.addAction(exclude_action)
+        
+        context_menu.exec_(self.results_table.viewport().mapToGlobal(pos))
+
+    
+
+    def store_original_data_to_temp(self):
+        # Store the original data to a temporary file
+        self.temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.json')
+        original_data = []
+        
+        for row in range(self.results_table.rowCount()):
+            finding_item = self.results_table.item(row, 0)
+            severity_item = self.results_table.item(row, 1)
+            common_fp_item = self.results_table.item(row, 2)
+            
+            original_data.append({
+                'finding': finding_item.text() if finding_item else "",
+                'severity': severity_item.text() if severity_item else "",
+                'common_fp': common_fp_item.text() if common_fp_item else ""
+            })
+        
+        with open(self.temp_file.name, 'w') as file:
+            json.dump(original_data, file)
+        
+        # Also store the data in self.original_data in case we need to access it directly
+        self.original_data = original_data.copy()
+
+        
+    def restore_data_from_temp(self):
+        try:
+            # Restore the data from the temporary file
+            with open(self.temp_file.name, 'r') as file:
+                original_data = json.load(file)
+
+            # Clear the current table content
+            self.results_table.setRowCount(0)
+
+            # Populate the table with the original data
+            for data in original_data:
+                row_position = self.results_table.rowCount()
+                self.results_table.insertRow(row_position)
+                
+                finding_item = QTableWidgetItem(data['finding'])
+                severity_item = QTableWidgetItem(data['severity'])
+                common_fp_item = QTableWidgetItem(data['common_fp'])
+                
+                self.results_table.setItem(row_position, 0, finding_item)
+                self.results_table.setItem(row_position, 1, severity_item)
+                self.results_table.setItem(row_position, 2, common_fp_item)
+            
+            # Clear exclusions and reapply filters if necessary
+            self.excluded_items.clear()
+
+            # Refresh the table view
+            self.results_table.viewport().update()
+            self.results_table.update()
+        except:
+            pass # prevent crashing if reset changes is pressed on a empty scan 
+
+
+
+    def reset_changes(self):
+        # Restore the data from the temporary file
+        self.restore_data_from_temp()
+        
+        # Clear exclusions
+        self.excluded_items.clear()
+
+        # Refresh the table view
+        self.results_table.viewport().update()
+        self.results_table.update()
+
+
+
+
+    def update_progress(self, message):
+        self.status_label.setText(message)
+        self.connect_mobsf_button.setText("Scanning...")
+        self.connect_mobsf_button.setDisabled(True)
+
+    def scan_finished(self):
+        self.status_label.setText("Scan completed.")
+        self.connect_mobsf_button.setText("Start Scan")
+        self.connect_mobsf_button.setEnabled(True)
+
+    def select_file(self):
+        file_dialog = QFileDialog()
+        file_path, _ = file_dialog.getOpenFileName(self, "Select IPA/APK File", "", "APK Files (*.apk);;IPA Files (*.ipa)")
+        if file_path:
+            self.selected_file_label.setText(f"Selected: {file_path}")
+            self.selected_file_path = file_path  # Store the file path for later use
+
+    def run_mobsf_scan(self):
+        try:
+            mobsf_url = self.mobsf_url_input.text()
+            app_path = self.selected_file_path
+
+            if not mobsf_url or not app_path:
+                QMessageBox.warning(self, "Input Error", "Please provide a MobSF URL and select an APK/IPA file.")
+                return
+
+            self.connect_mobsf_button.setDisabled(True)
+
+            # Create and start the scan thread
+            self.scan_thread = MobSFScanThread(mobsf_url, app_path)
+            self.scan_thread.progress.connect(self.update_progress)
+            self.scan_thread.result_ready.connect(self.display_results)
+            self.scan_thread.finished.connect(self.scan_finished)
+            self.scan_thread.start()
+        except Exception as e:
+            print(e)
+            
+    def exclude_item(self):
+        current_item = self.results_table.currentItem()
+        if current_item:
+            row = current_item.row()
+            self.excluded_items.add(row)
+            self.results_table.removeRow(row)
+            
+    
+    def load_plugin_id_mapping(self, file_path):
+        try:
+            with open(file_path, 'r') as f:
+                self.plugin_id_mapping = json.load(f)
+        except FileNotFoundError:
+            print(f"File {file_path} not found.")
+        except json.JSONDecodeError:
+            print(f"Error decoding JSON from file {file_path}.")
+
+    def extract_pattern(self, finding_name):
+        # Remove identifiable info within parentheses using regex
+        pattern = re.sub(r'\(.*?\)', '()', finding_name)
+        return pattern
+
+    def convert_finding_name(self, finding_name):
+        pattern = self.extract_pattern(finding_name)
+        if pattern in self.plugin_id_mapping:
+            return self.plugin_id_mapping[pattern]['new_name']
+        return finding_name
+
+    def export_report(self):
+        file_dialog = QFileDialog()
+        file_path, _ = file_dialog.getSaveFileName(self, "Save Report", "", "CSV Files (*.csv)")
+        if file_path:
+            with open(file_path, 'w', newline='') as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow([
+                    "Plugin ID", "CVE", "Risk", "Host", "Protocol", "Port",
+                    "Name", "Description", "Solution", "See Also", "References"
+                ])
+
+                processed_patterns = set()  # Track processed patterns
+
+                for row in range(self.results_table.rowCount()):
+                    if row in self.excluded_items:
+                        continue  # Skip excluded items
+
+                    
+
+                    finding_item = self.results_table.item(row, 0)
+                    severity_item = self.results_table.item(row, 1)
+
+                    finding_name = finding_item.text() if finding_item else ""
+                    severity = severity_item.text() if severity_item else ""
+
+                    if finding_name == 'Title': # exclude title row from final results if user doesnt do it already
+                        continue
+
+                    # Normalize severity using the severity map
+                    normalized_severity = self.severity_map.get(severity.capitalize(), severity)
+
+                    # Convert the finding name
+                    converted_name = self.convert_finding_name(finding_name)
+
+                    # Use the converted name to get the plugin ID
+                    plugin_id = None
+                    for key, value in self.plugin_id_mapping.items():
+                        if value.get('new_name') == converted_name:
+                            plugin_id = value.get('id', "")
+                            break
+
+                    if converted_name in processed_patterns:
+                        continue
+
+                    csv_row = [
+                        plugin_id,  # Plugin ID
+                        "",  # CVE (empty for now)
+                        normalized_severity,  # Risk
+                        "FIXME",  # Host (empty for now)
+                        "",  # Protocol (empty for now)
+                        "",  # Port (empty for now)
+                        converted_name,  # Name (use converted name)
+                        "FIXME",  # Description (empty for now)
+                        "FIXME",  # Solution (empty for now)
+                        "",  # See Also (empty for now)
+                        ""   # References (empty for now)
+                    ]
+
+                    writer.writerow(csv_row)
+                    processed_patterns.add(converted_name)
+
+    
+    
+    def display_results(self, findings):
+        unique_findings = []
+        seen_titles = set()
+
+        # Define severity colors
+        severity_colors = {
+            "High": QColor(255, 0, 0),        # Red
+            "Medium": QColor(255, 165, 0),    # Orange
+            "Low": QColor(0, 255, 0),         # Green
+            "Informational": QColor(0, 0, 255), # Blue
+            "Unknown": QColor(128, 128, 128)  # Gray
+        }
+
+        # Define false positive colors
+        fp_colors = {
+            "Yes": QColor(255, 192, 192),       # Light red for common false positive
+            "No": QColor(192, 255, 192)         # Light green for not common false positive
+        }
+
+        for finding in findings:
+            title = finding.get("title", "")
+            severity = finding.get("severity", "").capitalize()
+
+            # Exclude findings with 'secure' or 'hotspot' severity
+            if severity in ["Secure", "Hotspot"]:
+                continue
+
+            # Normalize severity using the severity map
+            normalized_severity = self.severity_map.get(severity, severity)
+
+            # Convert the finding name
+            converted_title = self.convert_finding_name(title)
+
+            if converted_title not in seen_titles:
+                finding["title"] = converted_title
+                finding["severity"] = normalized_severity
+                unique_findings.append(finding)
+                seen_titles.add(converted_title)
+
+        # Populate the results table with unique findings
+        self.results_table.setRowCount(len(unique_findings))
+        for row, finding in enumerate(unique_findings):
+            title_item = QTableWidgetItem(finding.get("title", ""))
+            severity_item = QTableWidgetItem(finding.get("severity", ""))
+            is_common_fp = "Yes" if self.is_common_fp(finding.get("title", "")) else "No"
+            common_fp_item = QTableWidgetItem(is_common_fp)
+
+            # Color-code severity
+            severity_key = finding.get("severity", "Unknown")
+            severity_color = severity_colors.get(severity_key, QColor(128, 128, 128))
+
+            # Set background and text color for severity
+            severity_item.setBackground(severity_color)
+
+            # Color-code common false positive
+            fp_color = fp_colors.get(is_common_fp, QColor(200, 200, 200))  # Default to light gray if not found
+            common_fp_item.setBackground(fp_color)
+            common_fp_item.setForeground(QColor(0, 0, 0))  # Black text for clarity
+
+            # Store finding data as metadata in the title_item
+            title_item.setData(Qt.UserRole, finding)
+
+            # Set the items in the table
+            self.results_table.setItem(row, 0, title_item)
+            self.results_table.setItem(row, 1, severity_item)
+            self.results_table.setItem(row, 2, common_fp_item)
+
+        self.results_table.viewport().update()  # Refresh the viewport
+        self.results_table.update()  # Refresh the table
+
+        self.store_original_data_to_temp()
+        self.load_and_display_manifest()
+
+        # Connect cell click to show details
+        self.results_table.cellDoubleClicked.connect(self.on_finding_double_click)
+
+
+
+    def on_finding_double_click(self, row, column):
+        # Get the finding data stored in the table
+        finding = self.results_table.item(row, 0).data(Qt.UserRole)
+        if finding:
+            # Show detailed view of the finding
+            self.show_finding_details(finding)
+
+    def show_finding_details(self, finding):
+        # Extract details from the finding
+        title = finding.get('title', 'N/A')
+        severity = finding.get('severity', 'N/A')
+        description = finding.get('description', 'N/A')
+        is_fp = "Yes" if self.is_common_fp(title) else "No"
+
+        # Create a dialog to show detailed information
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Finding Details")
+        dialog.resize(1200, 900)
+        dialog.setStyleSheet("""
+            QDialog {
+                background-color: #282a36;
+                color: #f8f8f2;
+            }
+            QLabel {
+                color: #bd93f9;
+                font-size: 14px;
+            }
+            QTextEdit {
+                background-color: #44475a;
+                color: #f8f8f2;
+                font-family: Consolas, 'Courier New', monospace;
+                font-size: 12px;
+                border: 1px solid #6272a4;
+                padding: 10px;
+            }
+            QPushButton {
+                background-color: #6272a4;
+                color: #f8f8f2;
+                border-radius: 5px;
+                padding: 8px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #50fa7b;
+            }
+        """)
+
+        # Create scroll area
+        scroll_area = QScrollArea(dialog)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: none;
+            }
+            QWidget {
+                background-color: #282a36;
+            }
+        """)
+
+        scroll_content = QWidget()
+        scroll_layout = QGridLayout(scroll_content)
+
+        # Add details to the scroll layout
+        scroll_layout.addWidget(QLabel("Title:"), 0, 0)
+        scroll_layout.addWidget(QLabel(title), 0, 1)
+
+        scroll_layout.addWidget(QLabel("Severity:"), 1, 0)
+        scroll_layout.addWidget(QLabel(severity), 1, 1)
+
+        scroll_layout.addWidget(QLabel("Common False Positive:"), 2, 0)
+        scroll_layout.addWidget(QLabel(is_fp), 2, 1)
+
+        scroll_layout.addWidget(QLabel("Description:"), 3, 0)
+        description_text = QTextEdit()
+        description_text.setPlainText(description)
+        description_text.setReadOnly(True)
+        scroll_layout.addWidget(description_text, 3, 1)
+
+        # Set the scroll content and attach it to the scroll area
+        scroll_area.setWidget(scroll_content)
+
+        # Create a main layout
+        main_layout = QVBoxLayout(dialog)
+        main_layout.addWidget(scroll_area)
+
+        # Close button
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(dialog.close)
+        main_layout.addWidget(close_button, alignment=Qt.AlignRight)
+
+        # Set main layout to dialog
+        dialog.setLayout(main_layout)
+
+        dialog.exec_()
+
+
+    def load_common_false_positives(self, file_path):
+        try:
+            with open(file_path, 'r') as file:
+                self.common_false_positives = {line.strip() for line in file}
+        except FileNotFoundError:
+            self.common_false_positives = set()
+            print(f"Error: File {file_path} not found.")
+
+    def is_common_fp(self, finding_title):
+        # Check if the finding is in the common false positives list
+        return finding_title in self.common_false_positives
+    
+    
+    def add_button_hover_effect(self, button):
+        button.setStyleSheet("""
+            background-color: #44475a;
+            color: #f8f8f2;
+        """)
+        button.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Enter and obj in [self.confirm_heartbeat_button, self.execute_command_button, self.clear_console_button]:
+            obj.setStyleSheet("""
+                background-color: #6272a4;
+                color: #f8f8f2;
+            """)
+        elif event.type() == QEvent.Leave and obj in [self.confirm_heartbeat_button, self.execute_command_button, self.clear_console_button]:
+            if obj == self.confirm_heartbeat_button:
+                obj.setStyleSheet("""
+                    background-color: #50fa7b;
+                    color: #282a36;
+                """)
+            elif obj == self.execute_command_button:
+                obj.setStyleSheet("""
+                    background-color: #bd93f9;
+                    color: #282a36;
+                """)
+            elif obj == self.clear_console_button:
+                obj.setStyleSheet("""
+                    background-color: #ff5555;
+                    color: #282a36;
+                """)
+        return super().eventFilter(obj, event)
+
+        
     def open_policy_wizard(self):
         wizard = PolicyWizard(self)
         wizard.exec_()
 
 
-    def setup_zeus_tab(self):
-        self.zeus_tab = QWidget()
-        self.zeus_layout = QVBoxLayout(self.zeus_tab)
+    def setup_webapp_tab(self):
+        # Create WebApp tab
+        self.webapp_tab = QWidget()
+        self.webapp_tab.is_custom_tab = True 
+        self.webapp_layout = QVBoxLayout(self.webapp_tab)
+
+        # Tab Widget for different tools (Zeus, Nuclei)
+        self.webapp_tools_tab_widget = QTabWidget()
+
+        # Setup Zeus Subtab
+        self.setup_zeus_subtab()
+
+        # Setup Nuclei Subtab
+        self.setup_nuclei_subtab()
+
+        # Add Zeus and Nuclei Subtabs to WebApp Tab Widget
+        self.webapp_tools_tab_widget.addTab(self.zeus_subtab, "Zeus")
+        self.webapp_tools_tab_widget.addTab(self.nuclei_subtab, "Nuclei")
+
+        # Add the tools tab widget to the main layout
+        self.webapp_layout.addWidget(self.webapp_tools_tab_widget)
+
+        # Add WebApp tab to the main tab widget
+        self.tab_widget.addTab(self.webapp_tab, "WebApp Testing")
+
+    
+    def setup_nuclei_subtab(self):
+        self.nuclei_subtab = QWidget()
+        self.nuclei_layout = QVBoxLayout(self.nuclei_subtab)
+
+        self.nuclei_subtab.setStyleSheet("""
+            QWidget {
+                background-color: #282a36;
+                color: #f8f8f2;
+            }
+            QLineEdit {
+                background-color: #44475a;
+                border: 2px solid #6272a4;
+                color: #f8f8f2;
+            }
+            QPushButton {
+                background-color: #6272a4;
+                color: #f8f8f2;
+                border-radius: 5px;
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background-color: #50fa7b;
+            }
+            QPushButton:disabled {
+                background-color: #44475a;
+                color: #f8f8f2;
+            }
+            QTableWidget {
+                background-color: #44475a;
+                border: none;
+                color: #f8f8f2;
+            }
+            QHeaderView::section {
+                background-color: #6272a4;
+                color: #f8f8f2;
+            }
+            QTableWidget::item {
+                border: none;
+                color: #f8f8f2;
+            }
+        """)
+
+        # Argument Layout for Nuclei
+        self.nuclei_argument_layout = QFormLayout()
+
+        # Target URL input
+        self.nuclei_target_url_input = QLineEdit()
+        self.nuclei_target_url_input.setPlaceholderText("Enter target URL (e.g., http://localhost:5000)")
+
+        # Proxy input
+        self.nuclei_proxy_input = QLineEdit()
+        self.nuclei_proxy_input.setPlaceholderText("Enter proxy (e.g., squid.kevlar.bulletproofsi.net:3128)")
+        self.nuclei_proxy_input.setText("squid.kevlar.bulletproofsi.net:3128")
+
+        # Add rows to the form
+        self.nuclei_argument_layout.addRow("Target URL:", self.nuclei_target_url_input)
+        self.nuclei_argument_layout.addRow("Proxy:", self.nuclei_proxy_input)
+
+        # Add form layout to the main layout
+        self.nuclei_layout.addLayout(self.nuclei_argument_layout)
+
+        # Run Nuclei button
+        self.nuclei_run_button = QPushButton("Run Nuclei")
+        self.nuclei_run_button.setCursor(Qt.PointingHandCursor)
+        self.nuclei_run_button.clicked.connect(self.execute_nuclei)
+        self.nuclei_layout.addWidget(self.nuclei_run_button)
+
+        # Generate HTML Report button
+        self.nuclei_report_button = QPushButton("Generate HTML Report")
+        self.nuclei_report_button.setCursor(Qt.PointingHandCursor)
+        self.nuclei_report_button.clicked.connect(self.generate_html_report)
+        self.nuclei_layout.addWidget(self.nuclei_report_button)
+
+        # Output Table for Nuclei Results
+        self.nuclei_table = QTableWidget()
+        self.nuclei_table.setColumnCount(4)
+        self.nuclei_table.setHorizontalHeaderLabels(["Template ID", "Host", "Type", "Severity"])
+        self.nuclei_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.nuclei_table.cellDoubleClicked.connect(self.show_detailed_view)
+        self.nuclei_layout.addWidget(self.nuclei_table)
+
+
+
+    def execute_nuclei(self):
+        target_url = self.nuclei_target_url_input.text().strip()
+        proxy = self.nuclei_proxy_input.text().strip()
+
+        if not target_url:
+            QMessageBox.warning(self, "Missing URL", "Please enter a target URL before running the scan.")
+            return
+
+        # Update button status to show scan is running
+        self.nuclei_run_button.setText("Running...")
+        self.nuclei_run_button.setEnabled(False)
+
+        # Clear the table before starting a new scan
+        self.nuclei_table.setRowCount(0)
+        self.nuclei_worker = NucleiWorker(target_url, proxy=proxy)
+        self.nuclei_worker.nuclei_finished.connect(self.handle_nuclei_results)
+        self.nuclei_worker.start()
+
+    
+    def generate_html_report(self):
+        if not hasattr(self, 'nuclei_results') or not self.nuclei_results:
+            QMessageBox.warning(self, "No Results", "No results to generate a report.")
+            return
+
+        html_content = '''
+        <html>
+        <head>
+            <title>Nuclei Scan Report</title>
+            <style>
+                body {
+                    background-color: #333;
+                    color: #fff;
+                    font-family: Arial, sans-serif;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    min-height: 100vh;
+                    margin: 0;
+                }
+                .container {
+                    width: 80%;
+                    max-width: 1200px;
+                    padding: 20px;
+                    background-color: #222;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                }
+                h1, h2 {
+                    color: #fff;
+                    margin-bottom: 20px;
+                }
+                .result-card {
+                    width: 100%;
+                    margin-bottom: 20px;
+                    padding: 15px;
+                    background-color: #333;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+                    border: 1px solid #444;
+                }
+                .result-card h3 {
+                    margin: 0;
+                    color: #fff;
+                    border-bottom: 1px solid #444;
+                    padding-bottom: 10px;
+                }
+                .result-card .details {
+                    margin-top: 10px;
+                }
+                .result-card .details div {
+                    margin-bottom: 15px;
+                }
+                .result-card .details .label {
+                    font-weight: bold;
+                    color: #ddd;
+                }
+                .result-card .details .value {
+                    color: #ccc;
+                    word-wrap: break-word;
+                }
+                .result-card pre {
+                    background-color: #111;
+                    padding: 10px;
+                    border-radius: 5px;
+                    font-size: 13px;
+                    color: #ccc;
+                    overflow-x: auto; 
+                    white-space: pre-wrap;
+                }
+                .severity-high {
+                    background-color: #FF5A5A;
+                    color: #fff;
+                    padding: 5px;
+                    border-radius: 4px;
+                }
+                .severity-medium {
+                    background-color: #FFAA00;
+                    color: #000;
+                    padding: 5px;
+                    border-radius: 4px;
+                }
+                .severity-low {
+                    background-color: #FFCC00;
+                    color: #000;
+                    padding: 5px;
+                    border-radius: 4px;
+                }
+                .severity-info {
+                    background-color: #7EB6FF;
+                    color: #000;
+                    padding: 5px;
+                    border-radius: 4px;
+                }
+                .url {
+                    color: #1E90FF;
+                    text-decoration: none;
+                }
+                .url:hover {
+                    text-decoration: underline;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>Nuclei Scan Report</h1>
+                <h2>Scan Results</h2>
+        '''
+
+        for result in self.nuclei_results:
+            info = result.get('info', {})
+            severity = info.get('severity', 'N/A')
+            description = info.get('description', 'N/A')
+            matched_at = result.get('matched-at', 'N/A')
+            request = result.get('request', 'N/A')
+            response = result.get('response', 'N/A')
+
+            severity_class = f'severity-{severity.lower()}' if severity.lower() in ['high', 'medium', 'low', 'info'] else 'severity-info'
+            
+            html_content += f"""
+                <div class="result-card">
+                    <h3>Template ID: {result.get('template-id', 'N/A')}</h3>
+                    <div class="details">
+                        <div><span class="label">Host:</span> <a href="{result.get('url', '#')}" class="url">{result.get('host', 'N/A')}</a></div>
+                        <div><span class="label">Type:</span> {result.get('type', 'N/A')}</div>
+                        <div><span class="label">Severity:</span> <span class="{severity_class}">{severity}</span></div>
+                        <div><span class="label">Description:</span> {description}</div>
+                        <div><span class="label">Matched At:</span> {matched_at}</div>
+                        <div><span class="label">Request:</span> <pre>{request}</pre></div>
+                        <div><span class="label">Response:</span> <pre>{response}</pre></div>
+                    </div>
+                </div>
+            """
+
+        html_content += '''
+            </div>
+        </body>
+        </html>
+        '''
+
+        # Save the HTML content to a file
+        file_dialog = QFileDialog(self, "Save Report", "", "HTML Files (*.html)")
+        if file_dialog.exec_():
+            file_path = file_dialog.selectedFiles()[0]
+            with open(file_path, 'w') as file:
+                file.write(html_content)
+            QMessageBox.information(self, "Report Saved", f"Report saved to {file_path}.")
+
+
+
+
+    def handle_nuclei_results(self, output):
+        try:
+            # Parse JSON output
+            results = json.loads(output)
+            self.nuclei_results = results  # Store results for report generation
+            self.populate_nuclei_table(results)
+            os.remove("output.json")
+        except:
+            error_message = f"Nuclei binary not found. Please use the addon menu"
+            QMessageBox.critical(self, "Nuclei Error", error_message)
+        
+
+        # Re-enable the button and update text when finished
+        self.nuclei_run_button.setText("Run Nuclei")
+        self.nuclei_run_button.setEnabled(True)
+
+
+    def populate_nuclei_table(self, results):
+        for result in results:
+            row_position = self.nuclei_table.rowCount()
+            self.nuclei_table.insertRow(row_position)
+
+            # Access 'info' section to get severity
+            info = result.get('info', {})
+            severity = info.get('severity', 'N/A')
+
+            self.nuclei_table.setItem(row_position, 0, QTableWidgetItem(result.get('template-id', 'N/A')))
+            self.nuclei_table.setItem(row_position, 1, QTableWidgetItem(result.get('host', 'N/A')))
+            self.nuclei_table.setItem(row_position, 2, QTableWidgetItem(result.get('type', 'N/A')))
+            self.nuclei_table.setItem(row_position, 3, QTableWidgetItem(severity))
+
+            # Store the entire result object as user data for detailed view
+            self.nuclei_table.item(row_position, 0).setData(Qt.UserRole, result)
+
+
+    def show_detailed_view(self, row, column):
+        result = self.nuclei_table.item(row, 0).data(Qt.UserRole)
+
+        # Get the severity information
+        info = result.get('info', {})
+        severity = info.get('severity', 'N/A')
+
+        # Create a dialog to show detailed information
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Detailed View")
+        dialog.resize(900, 600)  # Set a larger size for the dialog
+        dialog.setStyleSheet("""
+            QDialog {
+                background-color: #282a36;
+                color: #f8f8f2;
+            }
+            QLabel {
+                color: #bd93f9;
+                font-size: 14px;
+            }
+            QTextEdit {
+                background-color: #44475a;
+                color: #f8f8f2;
+                font-family: Consolas, 'Courier New', monospace;
+                font-size: 12px;
+                border: 1px solid #6272a4;
+                padding: 10px;
+            }
+            QPushButton {
+                background-color: #6272a4;
+                color: #f8f8f2;
+                border-radius: 5px;
+                padding: 8px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #50fa7b;
+            }
+        """)
+
+        # Create scroll area
+        scroll_area = QScrollArea(dialog)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: none;
+            }
+            QWidget {
+                background-color: #282a36;
+            }
+        """)
+        
+        scroll_content = QWidget()
+        scroll_layout = QGridLayout(scroll_content)
+
+        # Add severity to the scroll layout
+        scroll_layout.addWidget(QLabel("Severity:"), 0, 0)
+        scroll_layout.addWidget(QLabel(severity), 0, 1)
+
+        # Add other labels and values to the scroll layout
+        scroll_layout.addWidget(QLabel("Matcher Name:"), 1, 0)
+        scroll_layout.addWidget(QLabel(result.get('matcher-name', 'N/A')), 1, 1)
+
+        scroll_layout.addWidget(QLabel("Host:"), 2, 0)
+        scroll_layout.addWidget(QLabel(result.get('host', 'N/A')), 2, 1)
+
+        scroll_layout.addWidget(QLabel("URL:"), 3, 0)
+        scroll_layout.addWidget(QLabel(result.get('url', 'N/A')), 3, 1)
+
+        scroll_layout.addWidget(QLabel("Matched At:"), 4, 0)
+        scroll_layout.addWidget(QLabel(result.get('matched-at', 'N/A')), 4, 1)
+
+        # Add Request with proper formatting
+        scroll_layout.addWidget(QLabel("Request:"), 5, 0)
+        request_text = QTextEdit()
+        request_text.setPlainText(result.get('request', 'N/A'))  # Preserve original formatting
+        request_text.setReadOnly(True)
+        scroll_layout.addWidget(request_text, 5, 1)
+
+        # Add Response with proper formatting
+        scroll_layout.addWidget(QLabel("Response:"), 6, 0)
+        response_text = QTextEdit()
+        response_text.setPlainText(result.get('response', 'N/A'))  # Preserve original formatting
+        response_text.setReadOnly(True)
+        scroll_layout.addWidget(response_text, 6, 1)
+
+        # Set the scroll content and attach to the scroll area
+        scroll_area.setWidget(scroll_content)
+
+        # Create a main layout
+        main_layout = QVBoxLayout(dialog)
+        main_layout.addWidget(scroll_area)
+
+        # Close button
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(dialog.close)
+        main_layout.addWidget(close_button, alignment=Qt.AlignRight)
+
+        # Set main layout to dialog
+        dialog.setLayout(main_layout)
+
+        dialog.exec_()
+
+
+
+
+
+    def setup_zeus_subtab(self):
+        self.zeus_subtab = QWidget()
+        self.zeus_layout = QVBoxLayout(self.zeus_subtab)
 
         # Argument Layout
         self.zeus_argument_layout = QFormLayout()
@@ -1345,10 +4573,12 @@ class MainWindow(QMainWindow):
         self.zeus_layout.addWidget(self.zeus_output)
 
         # Add Zeus tab to the main tab widget
-        self.tab_widget.addTab(self.zeus_tab, "Zeus")
+        # self.tab_widget.addTab(self.zeus_tab, "Zeus")
+        self.zeus_layout.addWidget(self.zeus_output)
 
 
     def execute_zeus(self):
+        self.tools_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "tools")
         self.zeus_output.clear()
         target_url = self.target_url_input.text().strip()
         project_folder = self.project_folder_input.text().strip()
@@ -1359,28 +4589,28 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Parameter Error", "Please provide both a target URL and a project folder.")
             return
 
-        # Determine the correct binary based on the OS
-        os_type = platform.system().lower()
-        if os_type == "windows":
-            zeus_executable = "ZEUS.exe"
-        else:
-            zeus_executable = "./zeus"
+        # Define the path to the Zeus executable
+        zeus_executable = os.path.join(self.tools_dir, "zeus", "zeus" + (".exe" if platform.system() == "Windows" else ""))
 
         # Check if the Zeus executable exists
-        if not os.path.exists(zeus_executable):
-            QMessageBox.warning(self, "Feature Not Implemented", "The Zeus binary does not exist on this system. This feature is not yet implemented.")
+        if not os.path.isfile(zeus_executable):
+            QMessageBox.warning(self, "Feature Not Implemented", "The Zeus binary does not exist in the tools directory - use the addon menu to download it.")
             return
 
         command_args = [zeus_executable, target_url, '--project-folder', project_folder]
         if login_config:
-            command_args.extend(['--login-config', login_config])
+            command_args.extend(['--policy', login_config])
         if proxy:
             command_args.extend(['--proxy', proxy])
 
+        # Set the working directory to where Zeus config files are located
+        zeus_working_dir = os.path.join(self.tools_dir, "zeus")
+        
         # Create and start the worker thread
-        self.zeus_worker = ZeusWorker(command_args)
+        self.zeus_worker = ZeusWorker(command_args, zeus_working_dir)
         self.zeus_worker.output_signal.connect(self.update_zeus_output)
         self.zeus_worker.start()
+
 
 
     def browse_login_config(self):
@@ -1425,25 +4655,10 @@ class MainWindow(QMainWindow):
         self.init_term_UI()
 
     def open_documentation(self):
-        tab = QWidget()
-        tab.is_custom_tab = True
-        layout = QVBoxLayout(tab)
-        documentation_file = os.path.join("wiki", "docs.html")
-        web_view = QWebView()
-        web_view.load(QUrl.fromLocalFile(os.path.abspath(documentation_file)))
-        layout.addWidget(web_view)
-        tab_index = self.tab_widget.addTab(tab, "Wiki")
-        # Add close button to the tab
-        close_button = QPushButton()
-        close_button.setIcon(self.style().standardIcon(QStyle.SP_DockWidgetCloseButton))
-        close_button.setStyleSheet(CLOSE_BUTTON_STYLE)
-        close_button.setFixedSize(16, 16)
-        close_button.setToolTip("Close Tab")
-        close_button.setProperty('tab_widget', tab)
-        close_button.clicked.connect(self.close_tab_from_button)
+        documentation_url = "https://fancyc-bsi.github.io/BSTI/"
+        url = QUrl(documentation_url)
+        QDesktopServices.openUrl(url)
 
-        self.tab_widget.tabBar().setTabButton(self.tab_widget.indexOf(tab), QTabBar.RightSide, close_button)
-        self.tab_widget.setCurrentIndex(tab_index)
 
     def create_report(self):
         # Open the custom dialog
@@ -1535,13 +4750,16 @@ class MainWindow(QMainWindow):
             self.report_id = report_id
             QMessageBox.information(self, "Information", 
                             f"Client ID ({self.client_id}) and Report ID ({self.report_id}) have been pre-filled based on your latest report generation.")
-            
+        
+        # Open the argument dialog, pre-filling the client and report IDs
         args_dialog = N2PArgsDialog(parent=self, default_client_id=self.client_id, default_report_id=self.report_id)
         if args_dialog.exec_() == QDialog.Accepted:
             args = args_dialog.get_arguments()
 
             # Prepare the command
             command = ["python", "n2p_ng.py"]
+
+            # Add standard arguments (excluding the noncore checkbox)
             for arg, value in args.items():
                 if arg != 'noncore' and value:
                     command.extend([f"--{arg}", value])
@@ -1550,21 +4768,35 @@ class MainWindow(QMainWindow):
             if args['noncore']:
                 command.append('--noncore')
 
+            # Check if the '-cf' argument is in the dialog results (TOML config file)
+            if 'cf' in args and args['cf']:
+                command.extend(['cf', args['cf']])
+
             # Execute in a new tab
             self.execute_n2p_in_tab(command, "Nessus2plextrac-ng")
 
 
+
     def execute_n2p_in_tab(self, command, tab_name):
-        # Create a new tab
+        # Create a new tab with Dracula theme
         tab = QTextEdit()
         tab.setReadOnly(True)
         tab.is_custom_tab = True
-
+        tab.setStyleSheet("""
+            QTextEdit {
+                background-color: #282a36;
+                color: #f8f8f2;
+                font-family: Consolas, monospace;
+                font-size: 12pt;
+                border: 1px solid #44475a;
+            }
+            """)
+        
         # Execute the script
         process = QProcess(tab)
         process.setProcessChannelMode(QProcess.MergedChannels)
         process.readyReadStandardOutput.connect(lambda: self.read_process_output(process, tab))
-        
+
         # Separate the command into the program and arguments
         program = command[0]
         arguments = command[1:]
@@ -1576,12 +4808,13 @@ class MainWindow(QMainWindow):
         # Add close button to the tab
         self.add_close_button_to_tab(tab, index)
 
-        # switch focus
+        # Switch focus
         self.tab_widget.setCurrentIndex(index)
 
 
     def read_process_output(self, process, text_edit):
-        text_edit.append(process.readAllStandardOutput().data().decode())
+        output = process.readAllStandardOutput().data().decode()
+        text_edit.append(output)
 
     def add_close_button_to_tab(self, tab, index):
         close_button = QPushButton()
@@ -1596,13 +4829,12 @@ class MainWindow(QMainWindow):
 
     def open_file(self):
         options = QFileDialog.Options()
-        file_name, _ = QFileDialog.getOpenFileName(self, "Open File", "", "All Supported Files (*.csv *.json *.html);; CSV Files (*.csv);;JSON Files (*.json);;HTML Files (*.html)", options=options)
+        file_name, _ = QFileDialog.getOpenFileName(self, "Open File", "", "All Supported Files (*.csv *.json);; CSV Files (*.csv);;JSON Files (*.json)", options=options)
         if file_name:
             tab = QWidget()
             tab.is_custom_tab = True
             layout = QVBoxLayout(tab)
 
-            # Check file extension and render content accordingly
             if file_name.lower().endswith('.csv'):
                 df = pd.read_csv(file_name)
                 self.df = df
@@ -1624,13 +4856,6 @@ class MainWindow(QMainWindow):
                 text_edit.setPlainText(pretty_json)
                 text_edit.setFont(QFont("Courier", 10))
                 layout.addWidget(text_edit)
-            elif file_name.lower().endswith('.html'):
-                try:
-                    web_view = QWebView()
-                    web_view.load(QUrl.fromLocalFile(os.path.abspath(file_name)))
-                    layout.addWidget(web_view)
-                except Exception as e:
-                    print("ERROR:", e) 
 
             self.tab_widget.addTab(tab, os.path.basename(file_name))
             close_button = QPushButton()
@@ -1775,7 +5000,7 @@ class MainWindow(QMainWindow):
         # Mode selection setup
         self.mode_label = QLabel("Mode:")
         self.mode_combobox = QComboBox()
-        self.mode_combobox.addItems(["deploy", "external", "internal", "monitor", "export", "web", "mobsf", "immuniweb", "create", "launch", "pause", "resume", "regen"])
+        self.mode_combobox.addItems(["deploy", "external", "internal", "monitor", "export", "create", "launch", "pause", "resume", "regen"])
         self.nmb_layout.addWidget(self.mode_label)
         self.nmb_layout.addWidget(self.mode_combobox)
 
@@ -1836,15 +5061,13 @@ class MainWindow(QMainWindow):
                 "targets-file": "File",
                 "scope": ["core", "nc", "custom"],
                 "exclude-file": "File",
-                "discovery": "Checkbox",
-                "eyewitness": "Checkbox"
+                "discovery": "Checkbox"
             },
             "create": {
                 "client-name": "Text",
                 "scope": ["core", "nc", "custom"],
                 "exclude-file": "File",
-                "targets-file": "File",
-                "discovery": "Checkbox"
+                "targets-file": "File"
             },
             "launch": {
                 "client-name": "Text"
@@ -1863,30 +5086,11 @@ class MainWindow(QMainWindow):
             },
             "internal": {
                 "csv-file": "File",
-                "local": "Checkbox",
-                "eyewitness": "Checkbox"
+                "local": "Checkbox"
             },
             "external": {
                 "csv-file": "File",
-                "local": "Checkbox",
-                "eyewitness": "Checkbox"
-            },
-            "web": {
-                "burp-user-file": "File",
-                "burp-pass-file": "File",
-                "targets": "File",
-                "burp-url": "Text",
-                "reattach": "Checkbox"
-            },
-            "mobsf": {
-                "mobsf-url": "Text",
-                "scan-type": ["apk", "ipa"],
-                "app-name": "File"
-            },
-            "immuniweb": {
-                "immuni-scan-type": ["apk", "ipa"],
-                "immuni-app-name": "File",
-                "force": "Checkbox"
+                "local": "Checkbox"
             },
             "regen": {
                 # No arguments required for regen mode
@@ -1985,48 +5189,49 @@ class MainWindow(QMainWindow):
 
     def update_output(self, text):
         self.nmb_output.append(text)
-
-
+        
+        
     def populate_log_sessions_list(self):
         self.log_sessions_combo.clear()
         log_dir = os.path.join("logs")
-        excluded_dirs = ["nmb"]  
 
         if os.path.exists(log_dir):
-            for session in sorted(os.listdir(log_dir)):
-                if os.path.isdir(os.path.join(log_dir, session)) and session not in excluded_dirs:
-                    self.log_sessions_combo.addItem(session)
+            for entry in sorted(os.listdir(log_dir)):
+                entry_path = os.path.join(log_dir, entry)
+                if os.path.isdir(entry_path):
+                    self.log_sessions_combo.addItem(entry)
+                elif os.path.isfile(entry_path):
+                    if entry.endswith(".log"):
+                        self.log_sessions_combo.addItem(entry)
 
-        # Add NMB_output.log to the combo box if it exists
-        nmb_log_file_path = os.path.join("logs", "nmb", "NMB_output.log")
-        if os.path.exists(nmb_log_file_path):
-            self.log_sessions_combo.addItem("NMB_output.log")
-
+        
+    
     def load_log_content(self, index):
         log_dir = os.path.join("logs")
         session_name = self.log_sessions_combo.itemText(index)
-        bsti_log_file_path = os.path.join(log_dir, session_name, "BSTI.log")
-        nmb_log_file_path = os.path.join("logs", "nmb", "NMB_output.log")
+        log_file_path = os.path.join(log_dir, session_name)
 
         log_content = ""
 
-        # Load content from BSTI.log if it exists
-        if os.path.exists(bsti_log_file_path):
-            with open(bsti_log_file_path, 'r') as file:
-                log_content += file.read()
-
-        # Load content from NMB_output.log if it exists
-        if session_name == "NMB_output.log" and os.path.exists(nmb_log_file_path):
-            with open(nmb_log_file_path, 'r') as file:
-                if log_content:
-                    log_content += "----------------------------------------"
-                log_content += file.read()
+        if os.path.isfile(log_file_path):
+            with open(log_file_path, 'r') as file:
+                log_content = file.read()
+        else:
+            session_path = os.path.join(log_dir, session_name)
+            if os.path.isdir(session_path):
+                for log_file in sorted(os.listdir(session_path)):
+                    if log_file.endswith(".log"):
+                        log_file_path = os.path.join(session_path, log_file)
+                        with open(log_file_path, 'r') as file:
+                            log_content += file.read() + "\n" + "-"*40 + "\n"
 
         if log_content:
             self.log_content_area.setText(log_content)
         else:
             self.log_content_area.clear()
 
+        
+        
     def delete_logs(self):
         confirmation = QMessageBox.question(self, "Delete Logs", "Are you sure you want to delete all logs?",
                                             QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
@@ -2039,7 +5244,7 @@ class MainWindow(QMainWindow):
                         for log_file in os.listdir(session_path):
                             os.remove(os.path.join(session_path, log_file))
                         os.rmdir(session_path)
-                    elif session == "nmb_output.log":
+                    elif os.path.isfile(session_path):
                         os.remove(session_path)
                 self.populate_log_sessions_list() 
             except Exception as e:
@@ -2456,17 +5661,18 @@ class MainWindow(QMainWindow):
         self.home_layout.addWidget(self.file_transfer_container, 1, 1)
 
     def update_diagnostics(self, top_output, ping_output):
-        if top_output == "Connection Error":
-            error_html = "<h3 style='color: #ff5555;'>System Status:</h3><pre>Connection Error: Unable to fetch system status.</pre>"
-            self.top_output_display.setHtml(error_html)
-            self.online_status_label.setText("<h3 style='color: #ff5555;'>BSTG Connection Status:</h3><p>Offline</p>")
-        else:
-            top_output_html = f"<h3 style='color: #8be9fd;'>System Status:</h3><pre>{top_output}</pre>"
-            self.top_output_display.setHtml(top_output_html)
+        pass
+        # if top_output == "Connection Error":
+        #     error_html = "<h3 style='color: #ff5555;'>System Status:</h3><pre>Connection Error: Unable to fetch system status.</pre>"
+        #     self.top_output_display.setHtml(error_html)
+        #     self.online_status_label.setText("<h3 style='color: #ff5555;'>BSTG Connection Status:</h3><p>Offline</p>")
+        # else:
+        #     top_output_html = f"<h3 style='color: #8be9fd;'>System Status:</h3><pre>{top_output}</pre>"
+        #     self.top_output_display.setHtml(top_output_html)
 
-            online_status = "Online" if "time=" in ping_output else "Offline"
-            online_status_html = f"<h3 style='color: #8be9fd;'>BSTG Connection Status:</h3><p>{online_status}</p>"
-            self.online_status_label.setText(online_status_html)
+        #     online_status = "Online" if "time=" in ping_output else "Offline"
+        #     online_status_html = f"<h3 style='color: #8be9fd;'>BSTG Connection Status:</h3><p>{online_status}</p>"
+        #     self.online_status_label.setText(online_status_html)
 
 
     def add_home_cards(self):
@@ -2627,7 +5833,7 @@ class MainWindow(QMainWindow):
         # Create a close button for the tab
         close_button = QPushButton()
         close_button.setCursor(Qt.PointingHandCursor)
-        close_button.setIcon(self.style().standardIcon(QStyle.SP_DockWidgetCloseButton))  # Or use a custom icon
+        close_button.setIcon(self.style().standardIcon(QStyle.SP_DockWidgetCloseButton))
         close_button.setStyleSheet(CLOSE_BUTTON_STYLE)
         close_button.setFixedSize(16, 16)
         close_button.setToolTip("Close Tab")
@@ -3013,6 +6219,7 @@ if __name__ == "__main__":
         main_window = MainWindow()
         main_window.show()
         sys.exit(app.exec_())
-    except:
+    except Exception as e:
+        print(e)
         pass # don't handle the exceptions here
 
